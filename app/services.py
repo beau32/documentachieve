@@ -22,11 +22,14 @@ from app.models import (
     ArchiveStatusResponse,
     GlacierRetrieveRequest, GlacierRetrieveResponse,
     DeleteResponse,
-    VectorSearchRequest, VectorSearchResponse, VectorSearchResult
+    VectorSearchRequest, VectorSearchResponse, VectorSearchResult,
+    PIIDetectionRequest, PIIDetectionResponse, PII,
+    AnonymizeRequest, AnonymizeResponse, AnonymizationOperation
 )
 from app.storage.factory import get_storage_provider
 from app.kafka_producer import get_kafka_producer
 from app.embedding_service import get_embedding_service
+from app.anonymization_service import get_anonymization_service, PIIType
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +43,7 @@ class DocumentArchiveService:
         self.storage = get_storage_provider()
         self.kafka = get_kafka_producer()
         self.embeddings = get_embedding_service()
+        self.anonymizer = get_anonymization_service()
     
     def _generate_document_id(self, data: bytes, filename: str, timestamp: datetime) -> str:
         """
@@ -981,4 +985,231 @@ class DocumentArchiveService:
                 results=[],
                 total_results=0,
                 search_time_ms=search_time_ms
+            )
+
+    async def detect_piis(self, request: PIIDetectionRequest) -> PIIDetectionResponse:
+        """
+        Detect personally identifiable information in a document.
+        
+        Args:
+            request: PII detection request with document ID and PII types
+            
+        Returns:
+            PIIDetectionResponse with detected PIIs
+        """
+        try:
+            # Retrieve document
+            doc = self.db.query(DocumentMetadata).filter(
+                DocumentMetadata.document_id == request.document_id
+            ).first()
+            
+            if not doc:
+                return PIIDetectionResponse(
+                    success=False,
+                    document_id=request.document_id,
+                    filename="unknown",
+                    pii_found=False,
+                    total_piis=0,
+                    pii_summary={},
+                    detected_piis=[],
+                    message="Document not found"
+                )
+            
+            # Retrieve document content from storage
+            try:
+                content_base64 = self.storage.retrieve(request.document_id)
+                content_bytes = base64.b64decode(content_base64)
+                # Try to decode as text; fallback to hex representation if binary
+                try:
+                    document_text = content_bytes.decode('utf-8', errors='ignore')
+                except:
+                    document_text = content_bytes.hex()
+            except Exception as e:
+                logger.warning(f"Could not retrieve document content: {str(e)}")
+                document_text = f"Unable to extract text: {str(e)}"
+            
+            # Convert PII types from strings to enum
+            pii_enum_types = None
+            if request.pii_types:
+                try:
+                    pii_enum_types = [PIIType(ptype) for ptype in request.pii_types]
+                except ValueError as e:
+                    logger.warning(f"Invalid PII type: {str(e)}")
+            
+            # Detect PIIs
+            detected_entities = self.anonymizer.detect_piis(document_text, pii_enum_types)
+            
+            # Get summary
+            summary = self.anonymizer.get_summary(detected_entities)
+            
+            # Build response
+            detected_piis = [
+                PII(
+                    type=entity.entity_type.value,
+                    detected_value=entity.text[:50] + "..." if len(entity.text) > 50 else entity.text,
+                    confidence=entity.confidence,
+                    position={"start": entity.start, "end": entity.end}
+                )
+                for entity in detected_entities
+            ]
+            
+            message = f"PII detection completed. Found {len(detected_entities)} PII." if detected_entities else "No PII detected."
+            
+            logger.info(f"PII detection for {request.document_id}: {len(detected_entities)} PIIs found")
+            
+            return PIIDetectionResponse(
+                success=True,
+                document_id=request.document_id,
+                filename=doc.filename,
+                pii_found=len(detected_entities) > 0,
+                total_piis=len(detected_entities),
+                pii_summary=summary,
+                detected_piis=detected_piis,
+                message=message
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in PII detection: {str(e)}")
+            return PIIDetectionResponse(
+                success=False,
+                document_id=request.document_id,
+                filename="unknown",
+                pii_found=False,
+                total_piis=0,
+                pii_summary={},
+                detected_piis=[],
+                message=f"Error during PII detection: {str(e)}"
+            )
+
+    async def anonymize_document(self, request: AnonymizeRequest) -> AnonymizeResponse:
+        """
+        Anonymize personally identifiable information in a document.
+        
+        Args:
+            request: Anonymization request with document ID, PII types, and options
+            
+        Returns:
+            AnonymizeResponse with anonymization results
+        """
+        try:
+            # Retrieve document metadata
+            doc = self.db.query(DocumentMetadata).filter(
+                DocumentMetadata.document_id == request.document_id
+            ).first()
+            
+            if not doc:
+                return AnonymizeResponse(
+                    success=False,
+                    document_id=request.document_id,
+                    original_filename="unknown",
+                    total_piis_anonymized=0,
+                    message="Document not found"
+                )
+            
+            # Retrieve document content
+            try:
+                content_base64 = self.storage.retrieve(request.document_id)
+                content_bytes = base64.b64decode(content_base64)
+                # Try to decode as text; fallback to hex representation if binary
+                try:
+                    document_text = content_bytes.decode('utf-8', errors='ignore')
+                except:
+                    document_text = content_bytes.hex()
+            except Exception as e:
+                logger.warning(f"Could not retrieve document content: {str(e)}")
+                return AnonymizeResponse(
+                    success=False,
+                    document_id=request.document_id,
+                    original_filename=doc.filename,
+                    total_piis_anonymized=0,
+                    message=f"Could not retrieve document: {str(e)}"
+                )
+            
+            # Convert PII types
+            pii_enum_types = None
+            if request.pii_types:
+                try:
+                    pii_enum_types = [PIIType(ptype) for ptype in request.pii_types]
+                except ValueError as e:
+                    logger.warning(f"Invalid PII type: {str(e)}")
+            
+            # Anonymize
+            anonymized_text, operations = self.anonymizer.anonymize(
+                document_text,
+                pii_enum_types,
+                request.mask_mode
+            )
+            
+            # Prepare response
+            anonymization_ops = [
+                AnonymizationOperation(
+                    type=op["type"].value if isinstance(op["type"], PIIType) else op["type"],
+                    original_text=op["original_text"][:50] + "..." if len(op["original_text"]) > 50 else op["original_text"],
+                    replacement=op["replacement"],
+                    confidence=op["confidence"]
+                )
+                for op in operations
+            ]
+            
+            # Generate preview (first 500 chars)
+            preview = anonymized_text[:500] + "..." if len(anonymized_text) > 500 else anonymized_text
+            
+            new_document_id = None
+            anonymized_filename = None
+            
+            # Optionally save anonymized version as new document
+            if request.save_anonymized_version and operations:
+                try:
+                    # Convert anonymized text back to base64
+                    anonymized_bytes = anonymized_text.encode('utf-8')
+                    anonymized_base64 = base64.b64encode(anonymized_bytes).decode('utf-8')
+                    
+                    # Create archive request for anonymized version
+                    name_parts = doc.filename.rsplit('.', 1)
+                    if len(name_parts) == 2:
+                        anonymized_filename = f"{name_parts[0]}-anonymized.{name_parts[1]}"
+                    else:
+                        anonymized_filename = f"{doc.filename}-anonymized"
+                    
+                    archive_request = ArchiveRequest(
+                        document_base64=anonymized_base64,
+                        filename=anonymized_filename,
+                        content_type=doc.content_type,
+                        tags={"anonymized": "true", "original_id": request.document_id},
+                        metadata={"original_filename": doc.filename, "source_document_id": request.document_id}
+                    )
+                    
+                    archive_response = await self.archive_document(archive_request)
+                    if archive_response.success:
+                        new_document_id = archive_response.document_id
+                        logger.info(f"Anonymized version saved: {new_document_id}")
+                
+                except Exception as e:
+                    logger.warning(f"Could not save anonymized version: {str(e)}")
+            
+            message = f"Document anonymized successfully. {len(operations)} PII anonymized with '{request.mask_mode}' mode."
+            
+            logger.info(f"Anonymization for {request.document_id}: {len(operations)} PIIs anonymized")
+            
+            return AnonymizeResponse(
+                success=True,
+                document_id=request.document_id,
+                original_filename=doc.filename,
+                anonymized_filename=anonymized_filename,
+                total_piis_anonymized=len(operations),
+                anonymization_operations=anonymization_ops,
+                preview_anonymized_content=preview,
+                new_document_id=new_document_id,
+                mask_mode_used=request.mask_mode,
+                message=message
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in anonymization: {str(e)}")
+            return AnonymizeResponse(
+                success=False,
+                document_id=request.document_id,
+                original_filename="unknown",
+                total_piis_anonymized=0,
+                message=f"Error during anonymization: {str(e)}"
             )

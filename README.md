@@ -7,6 +7,7 @@ A multi-cloud document archiving service supporting AWS S3, Azure Blob Storage, 
 - **Archive**: Upload documents in base64 format with custom tags and metadata
 - **Retrieve**: Download documents using unique hashed identifiers  
 - **Vector Search**: Semantic search to find similar documents using AI embeddings
+- **PII Detection & Anonymization**: Detect and redact personally identifiable information for compliance
 - **Report**: Generate metrics and analytics for archived documents
 - **Multi-Cloud**: Support for AWS S3, Azure Blob Storage, and GCP Storage
 - **Deep Archive**: Move documents to cost-effective cold storage (AWS Glacier, Azure Archive, GCP Archive)
@@ -272,6 +273,62 @@ all-mpnet-base-v2  # 109M parameters, most accurate
 - Subsequent queries are fast (typically <500ms for 1000 documents)
 - Small model recommended for CPU-only environments
 - Larger model beneficial for high accuracy requirements
+
+## Document Anonymization & PII Detection
+
+The application includes built-in PII (Personally Identifiable Information) detection and anonymization capabilities to help comply with data privacy regulations like GDPR and CCPA.
+
+### Supported PII Types
+
+The system can detect and anonymize the following types of PII:
+
+- **Email Addresses**: `email@example.com`
+- **Phone Numbers**: `(555) 123-4567`, `+1-555-123-4567`
+- **Social Security Numbers**: `123-45-6789`
+- **Credit Card Numbers**: `4532-1234-5678-9101`
+- **IP Addresses**: `192.168.1.1`, `2001:0db8:85a3::8a2e:0370:7334`
+- **Names**: Capitalized name patterns (heuristic-based)
+- **Addresses**: Street, city, state patterns
+- **Dates of Birth**: Various date formats
+- **Organizations**: Company and institution names
+
+### How PII Detection Works
+
+1. **Pattern Matching**: Regular expressions detect well-formed patterns (emails, phones, SSNs, etc.)
+2. **Heuristic Analysis**: Machine learning-friendly patterns detect names and complex entities
+3. **Confidence Scoring**: Each detected PII includes a confidence score (0-1)
+4. **Position Tracking**: Exact location of PII in document is preserved
+
+### Anonymization Modes
+
+**Redact Mode (Default)**
+Replaces detected PII with placeholder text:
+```
+Original: "Contact John Smith at john@example.com or 555-123-4567"
+Redacted: "Contact [NAME] at [EMAIL] or [PHONE]"
+```
+
+**Remove Mode**
+Completely removes detected PII from document:
+```
+Original: "Contact John Smith at john@example.com or 555-123-4567"
+Removed:  "Contact at"
+```
+
+### Use Cases
+
+- **Compliance**: Prepare documents for sharing while protecting personal data
+- **Data Sharing**: Safely share documents with third parties
+- **Research**: Anonymize sensitive documents for research purposes
+- **Privacy**: Remove personal information before archiving
+- **GDPR/CCPA**: Meet regulatory requirements for data minimization
+
+### Performance Notes
+
+- PII detection: Varies by document size (~100ms for typical documents)
+- Pattern matching is performed in-memory for speed
+- Optional: Save anonymized version as new archived document
+- Detailed audit trail of all anonymization operations
 
 ## API Endpoints
 

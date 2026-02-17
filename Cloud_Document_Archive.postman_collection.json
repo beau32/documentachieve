@@ -339,8 +339,58 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Privacy & Compliance",
+      "item": [
+        {
+          "name": "Detect PII",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"pii_types\": [\"email\", \"phone\", \"ssn\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/detect-pii",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "detect-pii"]
+            },
+            "description": "Scan a document for personally identifiable information (PII)\n\nDetects: emails, phone numbers, SSNs, credit cards, IP addresses, names, addresses, dates of birth"
+          },
+          "response": []
+        },
+        {
+          "name": "Anonymize Document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"pii_types\": null,\n  \"mask_mode\": \"redact\",\n  \"save_anonymized_version\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/anonymize",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "anonymize"]
+            },
+            "description": "Remove or redact personally identifiable information from a document\n\nMask modes:\n- redact: Replace PII with [TYPE] placeholder\n- remove: Delete PII from document\n\nCan save anonymized version as new archived document"
+          },
+          "response": []
+        }
+      ]
     }
-  ],
   "variable": [
     {
       "key": "base_url",

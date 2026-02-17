@@ -496,3 +496,142 @@ class RestoreStatusCheckResponse(BaseModel):
     errors: int
     documents: List[Dict[str, Any]]
 
+
+class PIIDetectionRequest(BaseModel):
+    """Request model for PII detection in a document."""
+    document_id: str = Field(..., description="Unique hashed identifier of the document")
+    pii_types: Optional[List[str]] = Field(
+        default=None,
+        description="Specific PII types to detect: name, email, phone, ssn, credit_card, ip_address, address, date_of_birth, person, organization"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "document_id": "a1b2c3d4e5f6abcd1234567890abcdef",
+                "pii_types": ["email", "phone", "ssn"]
+            }
+        }
+
+
+class PII(BaseModel):
+    """Detected PII entity."""
+    type: str = Field(..., description="PII entity type")
+    detected_value: str = Field(..., description="The detected PII value (showing from document)")
+    confidence: float = Field(..., description="Confidence score 0-1")
+    position: Dict[str, int] = Field(..., description="Start and end position in text")
+
+
+class PIIDetectionResponse(BaseModel):
+    """Response model for PII detection."""
+    success: bool
+    document_id: str
+    filename: str
+    pii_found: bool
+    total_piis: int
+    pii_summary: Dict[str, int] = Field(..., description="Count of each PII type found")
+    detected_piis: List[PII] = Field(default_factory=list, description="List of detected PII entities")
+    message: str
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "document_id": "a1b2c3d4e5f6abcd1234567890abcdef",
+                "filename": "report.pdf",
+                "pii_found": True,
+                "total_piis": 3,
+                "pii_summary": {
+                    "email": 2,
+                    "phone": 1
+                },
+                "detected_piis": [
+                    {
+                        "type": "email",
+                        "detected_value": "john@example.com",
+                        "confidence": 0.95,
+                        "position": {"start": 145, "end": 162}
+                    }
+                ],
+                "message": "PII detection completed. Found 3 potential PII."
+            }
+        }
+
+
+class AnonymizeRequest(BaseModel):
+    """Request model for anonymizing a document."""
+    document_id: str = Field(..., description="Unique hashed identifier of the document")
+    pii_types: Optional[List[str]] = Field(
+        default=None,
+        description="Specific PII types to anonymize: name, email, phone, ssn, credit_card, ip_address, address, date_of_birth, person, organization"
+    )
+    mask_mode: str = Field(
+        default="redact",
+        description="Anonymization mode: 'redact' (replace with [TYPE]) or 'remove' (delete)"
+    )
+    save_anonymized_version: bool = Field(
+        default=True,
+        description="If True, save anonymized version as new document with '-anonymized' suffix"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "document_id": "a1b2c3d4e5f6abcd1234567890abcdef",
+                "pii_types": None,
+                "mask_mode": "redact",
+                "save_anonymized_version": True
+            }
+        }
+
+
+class AnonymizationOperation(BaseModel):
+    """Record of a single anonymization operation."""
+    type: str = Field(..., description="PII type that was anonymized")
+    original_text: str = Field(..., description="Original text before anonymization")
+    replacement: str = Field(..., description="Text used as replacement")
+    confidence: float = Field(..., description="Confidence score of detection")
+
+
+class AnonymizeResponse(BaseModel):
+    """Response model for anonymization operation."""
+    success: bool
+    document_id: str
+    original_filename: str
+    anonymized_filename: Optional[str] = None
+    total_piis_anonymized: int
+    anonymization_operations: List[AnonymizationOperation] = Field(default_factory=list)
+    preview_anonymized_content: Optional[str] = Field(
+        default=None,
+        description="First 500 characters of anonymized content for preview"
+    )
+    new_document_id: Optional[str] = Field(
+        default=None,
+        description="Document ID of saved anonymized version (if save_anonymized_version=True)"
+    )
+    mask_mode_used: str
+    message: str
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "document_id": "a1b2c3d4e5f6abcd1234567890abcdef",
+                "original_filename": "report.pdf",
+                "anonymized_filename": "report-anonymized.pdf",
+                "total_piis_anonymized": 5,
+                "anonymization_operations": [
+                    {
+                        "type": "email",
+                        "original_text": "john@example.com",
+                        "replacement": "[EMAIL]",
+                        "confidence": 0.95
+                    }
+                ],
+                "preview_anonymized_content": "Report prepared by [NAME] on [DATE]. Contact: [EMAIL]...",
+                "new_document_id": "b2c3d4e5f6abcd1234567890abcdefg1",
+                "mask_mode_used": "redact",
+                "message": "Document anonymized successfully. 5 PII removed."
+            }
+        }
+

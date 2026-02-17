@@ -46,7 +46,11 @@ The collection is organized into 5 main folders:
 ### 5. Search & Discovery
 - **Vector Semantic Search** - POST /api/v1/search - Find similar documents by semantic meaning
 
-### 6. Lifecycle Management
+### 6. Privacy & Compliance
+- **Detect PII** - POST /api/v1/detect-pii - Scan for personally identifiable information
+- **Anonymize Document** - POST /api/v1/anonymize - Redact or remove PII from document
+
+### 7. Lifecycle Management
 - **Run Lifecycle Archival** - POST /api/v1/lifecycle/archive - Trigger archival
 - **Check Restore Status** - POST /api/v1/lifecycle/check-restores - Check restores
 - **List Eligible Documents** - GET /api/v1/lifecycle/eligible - List archival candidates
@@ -191,6 +195,98 @@ export GCP_BUCKET_NAME=your-bucket
 - "employee handbook" → Finds HR documents, policies, guidelines
 - "project proposal" → Finds project plans, RFPs, business proposals
 - "meeting notes" → Finds meeting minutes, action items, summaries
+
+## PII Detection & Anonymization Guide
+
+### Basic PII Detection
+Scan a document for any PII without specifying types:
+```json
+{
+  "document_id": "a1b2c3d4e5f6abcd1234567890abcdef",
+  "pii_types": null
+}
+```
+
+### Detect Specific PII Types
+Scan only for certain PII types:
+```json
+{
+  "document_id": "a1b2c3d4e5f6abcd1234567890abcdef",
+  "pii_types": ["email", "phone", "ssn", "credit_card"]
+}
+```
+
+### Anonymize with Redaction (Default)
+Replace PII with placeholders:
+```json
+{
+  "document_id": "a1b2c3d4e5f6abcd1234567890abcdef",
+  "mask_mode": "redact",
+  "save_anonymized_version": true
+}
+```
+
+Result: `"Contact John Smith at john@example.com"` → `"Contact [NAME] at [EMAIL]"`
+
+### Anonymize with Removal
+Completely remove detected PII:
+```json
+{
+  "document_id": "a1b2c3d4e5f6abcd1234567890abcdef",
+  "mask_mode": "remove",
+  "save_anonymized_version": true
+}
+```
+
+Result: `"Contact John Smith at john@example.com"` → `"Contact at"`
+
+### Supported PII Types
+- `email` - Email addresses
+- `phone` - Phone numbers (various formats)
+- `ssn` - Social Security Numbers
+- `credit_card` - Credit card numbers
+- `ip_address` - IP addresses (v4 and v6)
+- `name` - Person names
+- `address` - Physical addresses
+- `date_of_birth` - Dates of birth
+- `person` - Person entities
+- `organization` - Organization/company names
+
+### Use Cases
+- **GDPR Compliance**: Prepare documents for sharing while protecting personal data
+- **Data Sharing**: Safely share documents with third parties
+- **Research**: Anonymize sensitive data for research purposes
+- **Privacy**: Remove personal info before long-term archival
+- **Audit Trail**: Track all anonymization operations for compliance
+
+### Workflow Example
+
+**Step 1: Detect PII**
+```json
+POST /api/v1/detect-pii
+{
+  "document_id": "a1b2c3d4e5f6abcd1234567890abcdef",
+  "pii_types": null
+}
+```
+Response shows detected PIIs and confidence scores.
+
+**Step 2: Review Detection**
+Look at the `pii_found` flag and `pii_summary` to see what was detected.
+
+**Step 3: Anonymize Document**
+```json
+POST /api/v1/anonymize
+{
+  "document_id": "a1b2c3d4e5f6abcd1234567890abcdef",
+  "mask_mode": "redact",
+  "save_anonymized_version": true
+}
+```
+Response includes preview of anonymized content and new document_id if saved.
+
+**Step 4: Use Anonymized Version**
+New document ID can be used like any other archived document for retrieval, archival, etc.
 
 ## Tips & Tricks
 

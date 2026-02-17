@@ -16,6 +16,8 @@ from app.models import (
     RestoreStatusCheckResponse,
     DeleteResponse,
     VectorSearchRequest, VectorSearchResponse,
+    PIIDetectionRequest, PIIDetectionResponse,
+    AnonymizeRequest, AnonymizeResponse,
     ErrorResponse
 )
 from app.services import DocumentArchiveService
@@ -579,6 +581,78 @@ async def vector_search(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Vector search failed"
+        )
+    
+    return response
+
+
+@router.post(
+    "/detect-pii",
+    response_model=PIIDetectionResponse,
+    responses={
+        200: {"description": "PII detection completed"},
+        404: {"model": ErrorResponse, "description": "Document not found"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    },
+    summary="Detect PII in document",
+    description="Scan a document for personally identifiable information (PII)"
+)
+async def detect_pii(
+    request: PIIDetectionRequest,
+    db: Session = Depends(get_db)
+) -> PIIDetectionResponse:
+    """
+    Detect personally identifiable information in an archived document.
+    
+    - **document_id**: Unique identifier of the document to scan
+    - **pii_types**: Optional list of specific PII types to detect (email, phone, ssn, credit_card, ip_address, name, address, date_of_birth, person, organization)
+    
+    Detects PIIs like emails, phone numbers, SSNs, credit cards, IP addresses, and names.
+    """
+    service = DocumentArchiveService(db)
+    response = await service.detect_piis(request)
+    
+    if not response.success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=response.message
+        )
+    
+    return response
+
+
+@router.post(
+    "/anonymize",
+    response_model=AnonymizeResponse,
+    responses={
+        200: {"description": "Anonymization completed"},
+        404: {"model": ErrorResponse, "description": "Document not found"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    },
+    summary="Anonymize document",
+    description="Remove or redact personally identifiable information from a document"
+)
+async def anonymize_document(
+    request: AnonymizeRequest,
+    db: Session = Depends(get_db)
+) -> AnonymizeResponse:
+    """
+    Anonymize personally identifiable information in an archived document.
+    
+    - **document_id**: Unique identifier of the document to anonymize
+    - **pii_types**: Optional list of specific PII types to anonymize
+    - **mask_mode**: Anonymization mode - 'redact' (replace with [TYPE]) or 'remove' (delete)
+    - **save_anonymized_version**: If True, save anonymized version as new document
+    
+    Replaces or removes detected PII and optionally saves as new document.
+    """
+    service = DocumentArchiveService(db)
+    response = await service.anonymize_document(request)
+    
+    if not response.success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=response.message
         )
     
     return response
