@@ -1,0 +1,56 @@
+# Cloud Document Archive Configuration
+# Copy this file to config.yaml and update with your settings
+
+app:
+  name: Cloud Document Archive
+  debug: false
+
+# Storage Configuration
+storage:
+  # Provider: aws_s3, azure_blob, or gcp_storage
+  provider: aws_s3
+  
+  # AWS S3 Configuration
+  aws:
+    access_key_id: ""
+    secret_access_key: ""
+    region: us-east-1
+    bucket: document-archive
+    
+    # Glacier Configuration
+    glacier:
+      restore_days: 7
+      restore_tier: Standard  # Expedited, Standard, or Bulk
+  
+  # Azure Blob Storage Configuration
+  azure:
+    connection_string: ""
+    container_name: document-archive
+  
+  # GCP Storage Configuration
+  gcp:
+    project_id: ""
+    credentials_path: ""
+    bucket_name: document-archive
+
+# Database Configuration
+database:
+  url: sqlite:///./document_archive.db
+
+# Kafka Configuration
+kafka:
+  enabled: false
+  bootstrap_servers: localhost:9092
+  topics:
+    restore_ready: document-restore-ready
+    archived: document-archived
+
+# Lifecycle/Automatic Archival Configuration
+lifecycle:
+  enabled: false
+  # Days after creation to move to archive
+  archive_after_days: 90
+  # Days after creation to move to deep archive
+  deep_archive_after_days: 365
+  # How often to check for files to archive (in hours)
+  check_interval_hours: 24

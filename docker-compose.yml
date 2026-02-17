@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # Zookeeper for Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - archive-network
+
+  # Kafka message broker
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - archive-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Document Archive API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      # Application
+      DEBUG: "false"
+      
+      # Storage Provider (aws_s3, azure_blob, or gcp_storage)
+      STORAGE_PROVIDER: "aws_s3"
+      
+      # AWS S3
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      AWS_REGION: "us-east-1"
+      AWS_S3_BUCKET: "document-archive"
+      
+      # AWS Glacier
+      AWS_GLACIER_RESTORE_DAYS: "7"
+      AWS_GLACIER_RESTORE_TIER: "Standard"
+      
+      # Azure Blob (if using Azure)
+      AZURE_CONNECTION_STRING: "${AZURE_CONNECTION_STRING:-}"
+      AZURE_CONTAINER_NAME: "document-archive"
+      
+      # GCP Storage (if using GCP)
+      GCP_PROJECT_ID: "${GCP_PROJECT_ID:-}"
+      GCP_CREDENTIALS_PATH: "${GCP_CREDENTIALS_PATH:-}"
+      GCP_BUCKET_NAME: "document-archive"
+      
+      # Database
+      DATABASE_URL: "sqlite:///./data/document_archive.db"
+      
+      # Kafka
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+      KAFKA_TOPIC_RESTORE_READY: "document-restore-ready"
+      KAFKA_TOPIC_ARCHIVED: "document-archived"
+      KAFKA_ENABLED: "true"
+      
+      # Lifecycle/Archival
+      LIFECYCLE_ENABLED: "true"
+      LIFECYCLE_ARCHIVE_AFTER_DAYS: "90"
+      LIFECYCLE_DEEP_ARCHIVE_AFTER_DAYS: "365"
+      LIFECYCLE_CHECK_INTERVAL_HOURS: "24"
+    
+    volumes:
+      - ./data:/app/data
+      - ./app:/app/app
+    networks:
+      - archive-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  archive-network:
+    driver: bridge
+
+volumes:
+  kafka-data:

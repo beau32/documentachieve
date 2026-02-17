@@ -1,0 +1,356 @@
+{
+  "info": {
+    "_postman_id": "cloud-document-archive-api",
+    "name": "Cloud Document Archive API",
+    "description": "Collection for Cloud Document Archive API\n\nA multi-cloud document archiving service supporting AWS S3, Azure Blob Storage, and Google Cloud Storage.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Root Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            },
+            "description": "Get basic health check and application info"
+          },
+          "response": []
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Get detailed health check with key statistics"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Document Archive",
+      "item": [
+        {
+          "name": "Archive Document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_base64\": \"SGVsbG8gV29ybGQhIFRoaXMgaXMgYSB0ZXN0IGRvY3VtZW50Lg==\",\n  \"filename\": \"sample_report.pdf\",\n  \"content_type\": \"application/pdf\",\n  \"tags\": {\n    \"department\": \"finance\",\n    \"year\": \"2026\",\n    \"category\": \"quarterly-report\"\n  },\n  \"metadata\": {\n    \"author\": \"John Doe\",\n    \"version\": \"1.0\",\n    \"confidential\": true\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/archive",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "archive"]
+            },
+            "description": "Archive a new document with tags and metadata"
+          },
+          "response": []
+        },
+        {
+          "name": "Retrieve Document (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_id\": \"{{document_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/retrieve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "retrieve"]
+            },
+            "description": "Retrieve a document using POST method"
+          },
+          "response": []
+        },
+        {
+          "name": "Retrieve Document (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/retrieve/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "retrieve", "{{document_id}}"]
+            },
+            "description": "Retrieve a document using GET method with document_id in URL"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Document",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/archive/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "archive", "{{document_id}}"]
+            },
+            "description": "Permanently delete a document from archive and database"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Deep Archive & Restoration",
+      "item": [
+        {
+          "name": "Move to Deep Archive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"storage_tier\": \"deep_archive\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/deep-archive",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "deep-archive"]
+            },
+            "description": "Move a document to deep archive (Glacier, Azure Archive, etc.)"
+          },
+          "response": []
+        },
+        {
+          "name": "Restore from Deep Archive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"restore_days\": 7,\n  \"restore_tier\": \"Standard\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/restore",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "restore"]
+            },
+            "description": "Restore a document from deep archive"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Archive Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/archive-status/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "archive-status", "{{document_id}}"]
+            },
+            "description": "Check the current archive/restore status of a document"
+          },
+          "response": []
+        },
+        {
+          "name": "Retrieve from Glacier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"restore_tier\": \"standard\",\n  \"restore_days\": 7\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/glacier/retrieve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "glacier", "retrieve"]
+            },
+            "description": "Retrieve a document from Glacier storage with automatic restore"
+          },
+          "response": []
+        },
+        {
+          "name": "Retrieve from Glacier (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/glacier/retrieve/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "glacier", "retrieve", "{{document_id}}"]
+            },
+            "description": "Retrieve a document from Glacier using GET method"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reports & Analytics",
+      "item": [
+        {
+          "name": "Generate Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start_date\": \"2026-01-01T00:00:00\",\n  \"end_date\": \"2026-02-17T23:59:59\",\n  \"group_by\": \"department\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/report",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "report"]
+            },
+            "description": "Generate metrics report for a time period with optional grouping"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Search & Discovery",
+      "item": [
+        {
+          "name": "Vector Semantic Search",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"quarterly financial report\",\n  \"top_k\": 5,\n  \"min_similarity\": 0.5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/search",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "search"]
+            },
+            "description": "Perform semantic search to find similar documents based on query text"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Lifecycle Management",
+      "item": [
+        {
+          "name": "Run Lifecycle Archival",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dry_run\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/lifecycle/archive",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "lifecycle", "archive"]
+            },
+            "description": "Manually trigger lifecycle archival to move old documents to deep archive"
+          },
+          "response": []
+        },
+        {
+          "name": "Check Restore Status",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/lifecycle/check-restores",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "lifecycle", "check-restores"]
+            },
+            "description": "Check all pending restores and publish Kafka events for completed restores"
+          },
+          "response": []
+        },
+        {
+          "name": "List Eligible Documents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/lifecycle/eligible",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "lifecycle", "eligible"]
+            },
+            "description": "List documents eligible for lifecycle archival based on configured thresholds"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "document_id",
+      "value": "a1b2c3d4e5f6abcd1234567890abcdef",
+      "type": "string"
+    }
+  ]
+}
