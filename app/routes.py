@@ -2,10 +2,11 @@
 
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.middleware import get_current_user, require_permission, require_role
 from app.models import (
     ArchiveRequest, ArchiveResponse,
     RetrieveRequest, RetrieveResponse,
@@ -43,7 +44,9 @@ router = APIRouter(prefix="/api/v1", tags=["Document Archive"])
 )
 async def archive_document(
     request: ArchiveRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+    permission: str = Depends(require_permission("document_upload"))
 ) -> ArchiveResponse:
     """
     Archive a document to cloud storage.
@@ -81,7 +84,9 @@ async def archive_document(
 )
 async def delete_document(
     document_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+    permission: str = Depends(require_permission("document_delete"))
 ) -> DeleteResponse:
     """
     Delete a document from the archive.
@@ -115,7 +120,9 @@ async def delete_document(
 )
 async def retrieve_document(
     request: RetrieveRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+    permission: str = Depends(require_permission("document_download"))
 ) -> RetrieveResponse:
     """
     Retrieve a document from cloud storage.
@@ -682,7 +689,9 @@ async def get_audit_logs(
     status: Optional[str] = Query(None, description="Filter by status (success, failure, partial)"),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+    permission: str = Depends(require_permission("audit_read"))
 ) -> AuditLogsResponse:
     """
     Retrieve audit logs for a given period with optional filtering.

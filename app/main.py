@@ -13,6 +13,7 @@ from app.database import init_db, SessionLocal, DocumentMetadata
 from app.routes import router
 from app.kafka_producer import get_kafka_producer
 from app.lifecycle_service import start_lifecycle_scheduler, stop_lifecycle_scheduler
+from app.middleware import AuthMiddleware, AuditMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -96,6 +97,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add authentication middleware (validates JWT tokens)
+if settings.auth_enabled:
+    app.add_middleware(AuthMiddleware)
+    logger.info("Authentication middleware enabled")
+
+# Add audit middleware (logs all requests/responses)
+if settings.audit_enabled:
+    app.add_middleware(AuditMiddleware)
+    logger.info("Audit middleware enabled")
 
 # Include API routes
 app.include_router(router)
