@@ -11,6 +11,7 @@ from pydantic import Field
 
 class StorageProvider(str, Enum):
     """Supported cloud storage providers."""
+    LOCAL = "local"
     AWS_S3 = "aws_s3"
     AZURE_BLOB = "azure_blob"
     GCP_STORAGE = "gcp_storage"
@@ -32,6 +33,12 @@ class RestoreStatus(str, Enum):
     RESTORED = "restored"               # Document is temporarily restored
 
 
+class EncryptionAlgorithm(str, Enum):
+    """Supported encryption algorithms."""
+    AES_256_GCM = "AES-256-GCM"  # Symmetric encryption
+    RSA = "RSA"                   # Asymmetric encryption with RSA+AES hybrid
+
+
 class Settings(BaseSettings):
     """Application settings loaded from YAML and environment variables."""
     
@@ -40,7 +47,13 @@ class Settings(BaseSettings):
     debug: bool = False
     
     # Active storage provider
-    storage_provider: StorageProvider = StorageProvider.AWS_S3
+    storage_provider: StorageProvider = StorageProvider.LOCAL
+    
+    # Local Storage Configuration
+    local_storage_path: Optional[str] = Field(default="./documents", description="Local path for storing documents")
+    local_archive_path: Optional[str] = Field(default="./documents_archive", description="Local path for archive tier")
+    local_deep_archive_path: Optional[str] = Field(default="./documents_deep_archive", description="Local path for deep archive tier")
+    local_iceberg_warehouse: Optional[str] = Field(default="./iceberg_warehouse", description="Local path for Iceberg warehouse")
     
     # AWS S3 Configuration
     aws_access_key_id: Optional[str] = Field(default=None)
@@ -64,6 +77,18 @@ class Settings(BaseSettings):
     # Database for metadata (using SQLite for simplicity)
     database_url: str = "sqlite:///./document_archive.db"
     
+    # Iceberg Table Configuration (for S3-based metadata storage)
+    # Set database_url to "iceberg" to use Iceberg instead of traditional database
+    iceberg_catalog_uri: Optional[str] = Field(
+        default="http://localhost:8181",
+        description="URI of Iceberg REST catalog"
+    )
+    iceberg_s3_endpoint: Optional[str] = Field(
+        default=None,
+        description="S3 endpoint for Iceberg warehouse"
+    )
+    iceberg_warehouse_path: str = "s3://document-archive-iceberg-warehouse"
+    
     # Kafka Configuration
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_topic_restore_ready: str = "document-restore-ready"
@@ -75,6 +100,64 @@ class Settings(BaseSettings):
     lifecycle_archive_after_days: int = 90  # Days after creation to move to archive
     lifecycle_deep_archive_after_days: int = 365  # Days after creation to move to deep archive
     lifecycle_check_interval_hours: int = 24  # How often to check for files to archive
+    
+    # Encryption Configuration
+    encryption_enabled: bool = Field(
+        default=False,
+        description="Enable encryption for documents and database entries"
+    )
+    encryption_algorithm: EncryptionAlgorithm = Field(
+        default=EncryptionAlgorithm.RSA,
+        description="Encryption algorithm to use (RSA or AES-256-GCM)"
+    )
+    encryption_certificate_path: Optional[str] = Field(
+        default=None,
+        description="Path to X.509 certificate (public key) for encryption"
+    )
+    encryption_private_key_path: Optional[str] = Field(
+        default=None,
+        description="Path to private key for decryption"
+    )
+    encryption_key_password: Optional[str] = Field(
+        default=None,
+        description="Password for encrypted private key (if applicable)"
+    )
+    
+    # Authentication Configuration
+    auth_enabled: bool = Field(
+        default=True,
+        description="Enable user authentication and authorization"
+    )
+    jwt_secret_key: str = Field(
+        default="your-secret-key-change-in-production",
+        description="Secret key for JWT token signing"
+    )
+    jwt_access_token_expires: int = Field(
+        default=30,
+        description="Access token expiration time in minutes"
+    )
+    jwt_refresh_token_expires: int = Field(
+        default=7,
+        description="Refresh token expiration time in days"
+    )
+    
+    # Audit Logging Configuration
+    audit_enabled: bool = Field(
+        default=True,
+        description="Enable audit logging for API calls"
+    )
+    audit_log_file: str = Field(
+        default="audit.log",
+        description="Path to audit log file"
+    )
+    audit_include_request_body: bool = Field(
+        default=False,
+        description="Include request body in audit logs (can be security risk)"
+    )
+    audit_include_response_body: bool = Field(
+        default=False,
+        description="Include response body in audit logs (can be security risk)"
+    )
     
     class Config:
         env_file = ".env"
@@ -147,12 +230,26 @@ def _flatten_yaml_config(data: Dict[str, Any], flat: Dict[str, Any], prefix: str
                 flat['azure_container_name'] = value
             elif env_key == "GCP_PROJECT_ID":
                 flat['gcp_project_id'] = value
+            elif env_key == "LOCAL_STORAGE_PATH":
+                flat['local_storage_path'] = value
+            elif env_key == "LOCAL_ARCHIVE_PATH":
+                flat['local_archive_path'] = value
+            elif env_key == "LOCAL_DEEP_ARCHIVE_PATH":
+                flat['local_deep_archive_path'] = value
+            elif env_key == "LOCAL_ICEBERG_WAREHOUSE":
+                flat['local_iceberg_warehouse'] = value
             elif env_key == "GCP_CREDENTIALS_PATH":
                 flat['gcp_credentials_path'] = value
             elif env_key == "GCP_BUCKET_NAME":
                 flat['gcp_bucket_name'] = value
             elif env_key == "DATABASE_URL":
                 flat['database_url'] = value
+            elif env_key == "ICEBERG_CATALOG_URI":
+                flat['iceberg_catalog_uri'] = value
+            elif env_key == "ICEBERG_S3_ENDPOINT":
+                flat['iceberg_s3_endpoint'] = value
+            elif env_key == "ICEBERG_WAREHOUSE_PATH":
+                flat['iceberg_warehouse_path'] = value
             elif env_key == "KAFKA_ENABLED":
                 flat['kafka_enabled'] = value
             elif env_key == "KAFKA_BOOTSTRAP_SERVERS":
@@ -169,6 +266,32 @@ def _flatten_yaml_config(data: Dict[str, Any], flat: Dict[str, Any], prefix: str
                 flat['lifecycle_deep_archive_after_days'] = value
             elif env_key == "LIFECYCLE_CHECK_INTERVAL_HOURS":
                 flat['lifecycle_check_interval_hours'] = value
+            elif env_key == "ENCRYPTION_ENABLED":
+                flat['encryption_enabled'] = value
+            elif env_key == "ENCRYPTION_ALGORITHM":
+                flat['encryption_algorithm'] = value
+            elif env_key == "ENCRYPTION_CERTIFICATE_PATH":
+                flat['encryption_certificate_path'] = value
+            elif env_key == "ENCRYPTION_PRIVATE_KEY_PATH":
+                flat['encryption_private_key_path'] = value
+            elif env_key == "ENCRYPTION_KEY_PASSWORD":
+                flat['encryption_key_password'] = value
+            elif env_key == "AUTH_ENABLED":
+                flat['auth_enabled'] = value
+            elif env_key == "JWT_SECRET_KEY":
+                flat['jwt_secret_key'] = value
+            elif env_key == "JWT_ACCESS_TOKEN_EXPIRES":
+                flat['jwt_access_token_expires'] = value
+            elif env_key == "JWT_REFRESH_TOKEN_EXPIRES":
+                flat['jwt_refresh_token_expires'] = value
+            elif env_key == "AUDIT_ENABLED":
+                flat['audit_enabled'] = value
+            elif env_key == "AUDIT_LOG_FILE":
+                flat['audit_log_file'] = value
+            elif env_key == "AUDIT_INCLUDE_REQUEST_BODY":
+                flat['audit_include_request_body'] = value
+            elif env_key == "AUDIT_INCLUDE_RESPONSE_BODY":
+                flat['audit_include_response_body'] = value
 
 
 # Load settings, preferring YAML if available, falling back to environment variables

@@ -635,3 +635,169 @@ class AnonymizeResponse(BaseModel):
             }
         }
 
+
+# ============= Authentication & User Management Models =============
+
+class LoginRequest(BaseModel):
+    """Request model for user login."""
+    username: str = Field(..., description="Username")
+    password: str = Field(..., description="Password")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "username": "john.doe",
+                "password": "secure-password"
+            }
+        }
+
+
+class TokenResponse(BaseModel):
+    """Response model for token generation."""
+    access_token: str = Field(..., description="JWT access token")
+    refresh_token: str = Field(..., description="JWT refresh token")
+    token_type: str = Field(default="bearer", description="Token type")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "token_type": "bearer"
+            }
+        }
+
+
+class RefreshTokenRequest(BaseModel):
+    """Request model for token refresh."""
+    refresh_token: str = Field(..., description="Refresh token")
+
+
+class UserCreateRequest(BaseModel):
+    """Request model for creating a user."""
+    username: str = Field(..., description="Unique username", min_length=3, max_length=50)
+    email: str = Field(..., description="Email address")
+    password: str = Field(..., description="Password", min_length=8)
+    full_name: Optional[str] = Field(None, description="Full name")
+    role: str = Field(default="user", description="User role (admin, archive_manager, auditor, user, viewer)")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "username": "john.doe",
+                "email": "john@example.com",
+                "password": "secure-password-123",
+                "full_name": "John Doe",
+                "role": "user"
+            }
+        }
+
+
+class UserUpdateRequest(BaseModel):
+    """Request model for updating a user."""
+    email: Optional[str] = Field(None, description="Email address")
+    full_name: Optional[str] = Field(None, description="Full name")
+    is_active: Optional[bool] = Field(None, description="Whether user is active")
+
+
+class UserResponse(BaseModel):
+    """Response model for user information."""
+    id: int
+    username: str
+    email: str
+    full_name: Optional[str]
+    role: str
+    is_active: bool
+    created_at: str
+    updated_at: Optional[str] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": 1,
+                "username": "john.doe",
+                "email": "john@example.com",
+                "full_name": "John Doe",
+                "role": "user",
+                "is_active": True,
+                "created_at": "2026-02-21T10:00:00",
+                "updated_at": "2026-02-21T11:00:00"
+            }
+        }
+
+
+class RoleAssignRequest(BaseModel):
+    """Request model for assigning a role."""
+    role: str = Field(..., description="Role to assign (admin, archive_manager, auditor, user, viewer)")
+
+
+class AuditLogResponse(BaseModel):
+    """Response model for audit log entries."""
+    id: int
+    event_type: str
+    user_id: Optional[int]
+    username: Optional[str]
+    resource_type: Optional[str]
+    resource_id: Optional[str]
+    action: Optional[str]
+    status: str
+    ip_address: Optional[str]
+    user_agent: Optional[str]
+    timestamp: str
+    details: Dict[str, Any] = Field(default_factory=dict)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": 1,
+                "event_type": "document_upload",
+                "user_id": 1,
+                "username": "john.doe",
+                "resource_type": "document",
+                "resource_id": "abc123...",
+                "action": "upload",
+                "status": "success",
+                "ip_address": "192.168.1.1",
+                "user_agent": "Mozilla/5.0...",
+                "timestamp": "2026-02-21T10:30:00",
+                "details": {"filename": "report.pdf", "size_bytes": 1024}
+            }
+        }
+
+
+class AuditLogsResponse(BaseModel):
+    """Response model for list of audit logs."""
+    success: bool
+    total: int
+    logs: List[AuditLogResponse]
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "total": 100,
+                "logs": [
+                    {
+                        "id": 1,
+                        "event_type": "document_upload",
+                        "user_id": 1,
+                        "username": "john.doe",
+                        "resource_type": "document",
+                        "resource_id": "abc123...",
+                        "action": "upload",
+                        "status": "success",
+                        "ip_address": "192.168.1.1",
+                        "user_agent": "Mozilla/5.0...",
+                        "timestamp": "2026-02-21T10:30:00",
+                        "details": {}
+                    }
+                ]
+            }
+        }
+
+
+class ErrorResponse(BaseModel):
+    """Response model for errors."""
+    success: bool = False
+    error: str = Field(..., description="Error message")
+    details: Optional[Dict[str, Any]] = None

@@ -12,6 +12,9 @@ A multi-cloud document archiving service supporting AWS S3, Azure Blob Storage, 
 - **Multi-Cloud**: Support for AWS S3, Azure Blob Storage, and GCP Storage
 - **Deep Archive**: Move documents to cost-effective cold storage (AWS Glacier, Azure Archive, GCP Archive)
 - **Restore**: Initiate and track restoration of documents from deep archive
+- **Encryption**: Certificate-based encryption for documents and metadata with RSA+AES hybrid approach
+- **User Management**: JWT authentication, role-based access control (5 built-in roles), and granular permissions
+- **Audit Trail**: Comprehensive audit logging of all API calls for compliance (HIPAA, GDPR, PCI-DSS, SOC 2)
 - **Kafka Events**: Publish events for archive, delete, and restore operations
 - **Docker**: Pre-configured Docker and Docker Compose setup with Kafka integration
 - **YAML Configuration**: Support for declarative configuration via YAML files
@@ -131,6 +134,20 @@ lifecycle:
   enabled: true
   archive_after_days: 90
   deep_archive_after_days: 365
+
+# Authentication & Authorization
+auth:
+  enabled: true
+  jwt_secret_key: "change-this-to-a-random-key"
+  jwt_access_token_expires: 30       # minutes
+  jwt_refresh_token_expires: 7       # days
+
+# Audit Trail Logging
+audit:
+  enabled: true
+  log_file: audit.log
+  include_request_body: false        # Never log passwords!
+  include_response_body: false
 ```
 
 3. Load the YAML configuration:
@@ -140,6 +157,125 @@ uvicorn app.main:app --reload
 ```
 
 **Note:** Environment variables take precedence over YAML values.
+
+### Authentication Configuration
+
+Enable user authentication and audit logging via environment variables or config.yaml:
+
+```env
+# Enable authentication
+AUTH_ENABLED=true
+JWT_SECRET_KEY="your-strong-random-secret-key"
+JWT_ACCESS_TOKEN_EXPIRES=30
+JWT_REFRESH_TOKEN_EXPIRES=7
+
+# Enable audit logging
+AUDIT_ENABLED=true
+AUDIT_LOG_FILE=audit.log
+AUDIT_INCLUDE_REQUEST_BODY=false
+AUDIT_INCLUDE_RESPONSE_BODY=false
+```
+
+## User Management & Authentication
+
+The application supports user authentication via JWT tokens and role-based access control:
+
+**Quick Start:**
+```bash
+# Create admin user
+python -c "
+from app.user_management import UserManagementService, UserRole
+from app.database import SessionLocal
+db = SessionLocal()
+service = UserManagementService(db)
+service.create_user('admin', 'admin@example.com', 'password', UserRole.ADMIN)
+"
+
+# Login to get token
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"password"}'
+
+# Use token in requests
+curl -X GET http://localhost:8000/api/v1/users \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Roles Available:**
+- `admin` - System administrator (all permissions)
+- `archive_manager` - Document manager (full document operations + audit logs)
+- `auditor` - Compliance officer (read-only + full audit access)
+- `user` - Regular user (upload, retrieve, update documents)
+- `viewer` - External stakeholder (view only)
+
+**Documentation:**
+- Complete guide: [USER_MANAGEMENT.md](USER_MANAGEMENT.md)
+- Quick start: [USER_MANAGEMENT_QUICKSTART.md](USER_MANAGEMENT_QUICKSTART.md)
+- API documentation: [USER_MANAGEMENT.md#api-endpoints](USER_MANAGEMENT.md#api-endpoints)
+
+## Audit Trail & Compliance
+
+All API calls are logged for compliance and security. Track:
+- Document uploads, downloads, deletions
+- User authentication and access
+- Permission and role changes
+- Configuration modifications
+- Access denied incidents
+
+**View Audit Logs:**
+```bash
+curl -X GET "http://localhost:8000/api/v1/audit/logs?limit=100" \
+  -H "Authorization: Bearer AUDITOR_TOKEN"
+```
+
+Supports filtering by:
+- Event type (login, document_upload, access_denied, etc.)
+- User ID
+- Date range
+- Status (success/failure)
+
+**Compliance:**
+- ✅ HIPAA - Healthcare data access tracking
+- ✅ GDPR - Data access and modification logging
+- ✅ PCI-DSS - Access control and authentication
+- ✅ SOC 2 - Logical access and monitoring
+
+**Documentation:**
+- Complete audit guide: [AUDIT_QUICKSTART.md](AUDIT_QUICKSTART.md)
+- Compliance details: [USER_MANAGEMENT.md#compliance](USER_MANAGEMENT.md#compliance)
+- Phase 2 summary: [PHASE2_SUMMARY.md](PHASE2_SUMMARY.md)
+
+## Encryption
+
+Documents and metadata can be encrypted using certificate-based encryption with RSA+AES-256-GCM hybrid approach:
+
+**Documentation:**
+- Complete guide: [ENCRYPTION.md](ENCRYPTION.md)
+- Quick start: [ENCRYPTION_QUICKSTART.md](ENCRYPTION_QUICKSTART.md)
+
+## Getting Started Guides
+
+**Quick Start (5 minutes):**
+- [USER_MANAGEMENT_QUICKSTART.md](USER_MANAGEMENT_QUICKSTART.md) - User authentication & login
+- [AUDIT_QUICKSTART.md](AUDIT_QUICKSTART.md) - Audit logging setup
+
+**Phase 1 (Encryption):**
+- [ENCRYPTION.md](ENCRYPTION.md) - Certificate-based encryption documentation
+- [ENCRYPTION_QUICKSTART.md](ENCRYPTION_QUICKSTART.md) - Encryption setup (5 min)
+
+**Phase 2 (User Management & Audit - NEW):**
+- [USER_MANAGEMENT.md](USER_MANAGEMENT.md) - Complete user auth/RBAC guide
+- [PHASE2_SUMMARY.md](PHASE2_SUMMARY.md) - What was delivered in Phase 2
+- [PHASE2_DELIVERABLES.md](PHASE2_DELIVERABLES.md) - Complete deliverables list & status
+- [PHASE2_INTEGRATION_GUIDE.md](PHASE2_INTEGRATION_GUIDE.md) - How to integrate into routes
+
+**Reference Documentation:**
+- [CLOUD_PROVIDERS.md](CLOUD_PROVIDERS.md) - Cloud provider setup
+- [POSTMAN.md](POSTMAN.md) - API test collection
+- [LOCAL_STORAGE.md](LOCAL_STORAGE.md) - Local storage configuration
+- [STORAGE_PROVIDERS.md](STORAGE_PROVIDERS.md) - Storage provider reference
+- [GITHUB_DESCRIPTION.md](GITHUB_DESCRIPTION.md) - GitHub repository description
+- [CLOUD_ORGANIZATION.md](CLOUD_ORGANIZATION.md) - Cloud organization guide
 
 ## Running the Application
 
@@ -789,29 +925,70 @@ When documents are archived, deleted, moved to Glacier, or restored, events are 
 }
 ```
 
+## Encryption Configuration
+
+To enable certificate-based encryption for documents and metadata:
+
+1. Generate encryption keys:
+```bash
+python generate_encryption_keys.py
+```
+
+2. Configure in `config.yaml`:
+```yaml
+encryption:
+  enabled: true
+  algorithm: RSA
+  certificate_path: ./certs/certificate.pem
+  private_key_path: ./certs/private_key.pem
+```
+
+3. Use in API by adding `"encrypt": "true"` to metadata:
+```python
+requests.post("http://localhost:8000/api/v1/archive", json={
+    "document_base64": "...",
+    "metadata": {"encrypt": "true"}
+})
+```
+
+**For complete encryption setup and best practices, see the [Encryption Documentation](ENCRYPTION.md).**
+
+## Documentation
+
+- **[ENCRYPTION.md](ENCRYPTION.md)** - Complete encryption guide with algorithms, setup, best practices
+- **[ENCRYPTION_QUICKSTART.md](ENCRYPTION_QUICKSTART.md)** - 5-minute encryption setup guide
+- **[ENCRYPTION_INTEGRATION.md](ENCRYPTION_INTEGRATION.md)** - Developer integration guide
+- **[ENCRYPTION_SUMMARY.md](ENCRYPTION_SUMMARY.md)** - Implementation summary
+- **[STORAGE_PROVIDERS.md](STORAGE_PROVIDERS.md)** - Cloud provider details
+- **[ICEBERG_SETUP.md](ICEBERG_SETUP.md)** - Iceberg table setup guide
+
 ## Project Structure
 
 ```
 clouddocumentachieve/
 ├── app/
 │   ├── __init__.py
-│   ├── config.py            # Configuration management
-│   ├── database.py          # Database models and session
-│   ├── kafka_producer.py    # Kafka event publishing
-│   ├── lifecycle_service.py # Automatic Glacier archival
-│   ├── main.py              # FastAPI application
-│   ├── models.py            # Pydantic request/response models
-│   ├── routes.py            # API route definitions
-│   ├── services.py          # Business logic
+│   ├── config.py                # Configuration management
+│   ├── database.py              # Database models and session
+│   ├── encryption_service.py    # Certificate-based encryption
+│   ├── kafka_producer.py        # Kafka event publishing
+│   ├── lifecycle_service.py     # Automatic archival
+│   ├── main.py                  # FastAPI application
+│   ├── models.py                # Pydantic request/response models
+│   ├── routes.py                # API route definitions
+│   ├── services.py              # Business logic
 │   └── storage/
 │       ├── __init__.py
-│       ├── base.py          # Abstract storage provider
-│       ├── aws_s3.py        # AWS S3 implementation
-│       ├── azure_blob.py    # Azure Blob implementation
-│       ├── gcp_storage.py   # GCP Storage implementation
-│       └── factory.py       # Storage provider factory
-├── .env.example             # Environment template
-├── requirements.txt         # Python dependencies
+│       ├── base.py              # Abstract storage provider
+│       ├── aws_s3.py            # AWS S3 implementation
+│       ├── azure_blob.py        # Azure Blob implementation
+│       ├── gcp_storage.py       # GCP Storage implementation
+│       └── factory.py           # Storage provider factory
+├── .env.example                 # Environment template
+├── config.yaml.example          # YAML configuration template
+├── generate_encryption_keys.py  # Encryption key generation tool
+├── examples_encryption.py       # Encryption usage examples
+├── requirements.txt             # Python dependencies
 └── README.md
 ```
 

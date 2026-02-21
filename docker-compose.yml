@@ -49,10 +49,15 @@ services:
       # Application
       DEBUG: "false"
       
-      # Storage Provider (aws_s3, azure_blob, or gcp_storage)
-      STORAGE_PROVIDER: "aws_s3"
+      # Storage Provider (local, aws_s3, azure_blob, or gcp_storage)
+      STORAGE_PROVIDER: "local"
       
-      # AWS S3
+      # Local Storage (for development/testing)
+      LOCAL_STORAGE_PATH: "./data/documents"
+      LOCAL_ARCHIVE_PATH: "./data/documents_archive"
+      LOCAL_DEEP_ARCHIVE_PATH: "./data/documents_deep_archive"
+      
+      # AWS S3 (optional)
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
       AWS_REGION: "us-east-1"

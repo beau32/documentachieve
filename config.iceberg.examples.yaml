@@ -1,0 +1,270 @@
+# Cloud Document Archive Configuration with Iceberg Support
+# Example configurations for using AWS S3-based Iceberg tables
+
+# ==================== OPTION 1: SQLite (Default, Development) ====================
+app:
+  name: Cloud Document Archive
+  debug: false
+
+storage:
+  provider: aws_s3
+  aws:
+    access_key_id: "YOUR_AWS_ACCESS_KEY_ID"
+    secret_access_key: "YOUR_AWS_SECRET_ACCESS_KEY"
+    region: us-east-1
+    bucket: document-archive
+    glacier:
+      restore_days: 7
+      restore_tier: Standard
+
+# SQLite for local development (default)
+database:
+  url: sqlite:///./document_archive.db
+
+kafka:
+  enabled: false
+  bootstrap_servers: localhost:9092
+
+lifecycle:
+  enabled: false
+  archive_after_days: 90
+  deep_archive_after_days: 365
+  check_interval_hours: 24
+
+---
+
+# ==================== OPTION 2: MySQL (Production Database) ====================
+app:
+  name: Cloud Document Archive
+  debug: false
+
+storage:
+  provider: aws_s3
+  aws:
+    access_key_id: "YOUR_AWS_ACCESS_KEY_ID"
+    secret_access_key: "YOUR_AWS_SECRET_ACCESS_KEY"
+    region: us-east-1
+    bucket: document-archive
+    glacier:
+      restore_days: 7
+      restore_tier: Standard
+
+# MySQL for multi-machine deployments
+database:
+  url: mysql://user:password@mysql-host:3306/document_archive
+
+kafka:
+  enabled: true
+  bootstrap_servers: kafka-host:9092
+
+lifecycle:
+  enabled: true
+  archive_after_days: 90
+  deep_archive_after_days: 365
+  check_interval_hours: 24
+
+---
+
+# ==================== OPTION 3: Iceberg on S3 (Recommended for Scale) ====================
+app:
+  name: Cloud Document Archive
+  debug: false
+
+storage:
+  provider: aws_s3
+  aws:
+    access_key_id: "YOUR_AWS_ACCESS_KEY_ID"
+    secret_access_key: "YOUR_AWS_SECRET_ACCESS_KEY"
+    region: us-east-1
+    bucket: document-archive
+    glacier:
+      restore_days: 7
+      restore_tier: Standard
+
+# Iceberg on S3 - ACID transactions, schema evolution, time travel
+database:
+  url: "iceberg"
+
+# Iceberg Configuration (used when database.url = "iceberg")
+iceberg:
+  # Nessie REST Catalog (recommended open-source option)
+  # For managed solutions, use AWS Glue or Polaris
+  catalog_uri: "http://nessie-catalog:19120"
+  
+  # S3 endpoint (use AWS endpoint for production)
+  s3_endpoint: "https://s3.us-east-1.amazonaws.com"
+  
+  # S3 warehouse path where Iceberg metadata is stored
+  warehouse_path: "s3://document-archive-iceberg-warehouse"
+
+kafka:
+  enabled: true
+  bootstrap_servers: kafka-host:9092
+
+lifecycle:
+  enabled: true
+  archive_after_days: 90
+  deep_archive_after_days: 365
+  check_interval_hours: 24
+
+---
+
+# ==================== OPTION 4: Iceberg with AWS Glue Catalog ====================
+app:
+  name: Cloud Document Archive
+  debug: false
+
+storage:
+  provider: aws_s3
+  aws:
+    access_key_id: "YOUR_AWS_ACCESS_KEY_ID"
+    secret_access_key: "YOUR_AWS_SECRET_ACCESS_KEY"
+    region: us-east-1
+    bucket: document-archive
+    glacier:
+      restore_days: 7
+      restore_tier: Standard
+
+# Using AWS Glue as Iceberg catalog (no additional service needed)
+database:
+  url: "iceberg"
+
+iceberg:
+  # Use AWS Glue as the catalog
+  catalog_uri: "glue"  # Special value for AWS Glue
+  
+  # S3 endpoint (AWS endpoint)
+  s3_endpoint: "https://s3.us-east-1.amazonaws.com"
+  
+  # S3 warehouse path
+  warehouse_path: "s3://document-archive-iceberg-warehouse"
+
+kafka:
+  enabled: true
+  bootstrap_servers: kafka-host:9092
+
+lifecycle:
+  enabled: true
+  archive_after_days: 90
+  deep_archive_after_days: 365
+  check_interval_hours: 24
+
+---
+
+# ==================== OPTION 5: Iceberg with LocalStack (Local Testing) ====================
+app:
+  name: Cloud Document Archive
+  debug: true
+
+storage:
+  provider: aws_s3
+  aws:
+    access_key_id: "test"
+    secret_access_key: "test"
+    region: us-east-1
+    bucket: document-archive
+    glacier:
+      restore_days: 7
+      restore_tier: Standard
+
+# Iceberg with local services (LocalStack + Nessie)
+database:
+  url: "iceberg"
+
+iceberg:
+  # Local Nessie (from docker-compose.iceberg.yml)
+  catalog_uri: "http://localhost:19120"
+  
+  # LocalStack S3 endpoint
+  s3_endpoint: "http://localhost:4566"
+  
+  # Warehouse path on LocalStack S3
+  warehouse_path: "s3://document-archive-iceberg-warehouse"
+
+kafka:
+  enabled: false
+  bootstrap_servers: localhost:9092
+
+lifecycle:
+  enabled: false
+  archive_after_days: 90
+  deep_archive_after_days: 365
+  check_interval_hours: 24
+
+---
+
+# USAGE GUIDE:
+#
+# 1. SQLite (Option 1):
+#    - Best for: Local development, single-machine deployments
+#    - Pros: No setup needed, file is stored locally
+#    - Cons: Not scalable, no ACID guarantees for distributed systems
+#
+# 2. MySQL (Option 2):
+#    - Best for: Multi-machine traditional deployments
+#    - Pros: Familiar, scalable across machines
+#    - Cons: Separate database infrastructure needed
+#
+# 3. Iceberg + Nessie (Option 3):
+#    - Best for: Cloud-native, scalable, time-travel queries
+#    - Pros: ACID transactions, schema evolution, time travel, cost-effective
+#    - Cons: Requires Nessie service
+#    - Setup: docker-compose -f docker-compose.iceberg.yml up -d
+#
+# 4. Iceberg + AWS Glue (Option 4):
+#    - Best for: AWS-only, managed service
+#    - Pros: No additional services needed, fully managed
+#    - Cons: AWS-only, limited customization
+#
+# 5. Local Testing (Option 5):
+#    - Best for: Development with Iceberg
+#    - Pros: Full local setup, mimics production
+#    - Cons: Only for local testing
+#    - Setup: docker-compose -f docker-compose.iceberg.yml up -d
+#
+# ENVIRONMENT VARIABLES:
+#
+# To override config.yaml, use environment variables:
+#
+#   Export from YAML:        -> Becomes Environment Variable:
+#   app.name                 -> APP_NAME
+#   storage.aws.bucket       -> STORAGE_AWS_BUCKET
+#   database.url             -> DATABASE_URL (or use "iceberg" keyword)
+#   iceberg.catalog_uri      -> ICEBERG_CATALOG_URI
+#   iceberg.warehouse_path   -> ICEBERG_WAREHOUSE_PATH
+#
+# Example:
+#   export DATABASE_URL=iceberg
+#   export ICEBERG_CATALOG_URI=http://nessie:19120
+#   export ICEBERG_WAREHOUSE_PATH=s3://my-warehouse
+#
+# DEPLOYMENT:
+#
+# 1. Create CloudFormation stack:
+#    aws cloudformation create-stack \
+#      --stack-name doc-archive-iceberg \
+#      --template-body file://aws_s3_bucket.yaml \
+#      --parameters ParameterKey=CreateIcebergWarehouse,ParameterValue=yes \
+#      --capabilities CAPABILITY_NAMED_IAM
+#
+# 2. Deploy Nessie (if using option 3):
+#    docker-compose -f docker-compose.iceberg.yml up -d
+#
+# 3. Start application with Iceberg:
+#    docker run -e DATABASE_URL=iceberg \
+#      -e ICEBERG_CATALOG_URI=http://nessie:19120 \
+#      -e ICEBERG_WAREHOUSE_PATH=s3://warehouse-bucket \
+#      my-archive-app
+#
+# MONITORING:
+#
+# Query Iceberg statistics:
+#   from app.iceberg_database import get_iceberg_db
+#   db = get_iceberg_db()
+#   stats = db.get_statistics()
+#
+# Time travel query:
+#   past_metadata = db.get_time_travel_snapshot(
+#     document_id="abc123",
+#     timestamp=1707000000
+#   )

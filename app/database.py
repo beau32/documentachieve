@@ -45,9 +45,17 @@ class DocumentMetadata(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # Encryption fields
+    is_encrypted = Column(String(5), default="false", nullable=False)  # "true" or "false" for compatibility
+    encryption_algorithm = Column(String(50), nullable=True)  # e.g., "RSA", "AES-256-GCM"
+    encryption_iv_or_key = Column(Text, nullable=True)  # Hex-encoded IV (AES) or encrypted key (RSA)
+    encryption_tag = Column(Text, nullable=True)  # Hex-encoded authentication tag
+    metadata_encrypted = Column(String(5), default="false", nullable=False)  # "true" or "false"
+    
     # Add indexes for common queries
     __table_args__ = (
         Index('idx_created_at_provider', 'created_at', 'storage_provider'),
+        Index('idx_is_encrypted', 'is_encrypted'),
     )
     
     @property
@@ -111,6 +119,55 @@ class DocumentTag(Base):
     
     __table_args__ = (
         Index('idx_tag_key_value', 'tag_key', 'tag_value'),
+    )
+
+
+class User(Base):
+    """Database model for users."""
+    
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, index=True, nullable=False)
+    email = Column(String(100), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    full_name = Column(String(100), nullable=True)
+    role = Column(String(50), default="user", nullable=False)  # admin, archive_manager, auditor, user, viewer
+    is_active = Column(String(5), default="true", nullable=False)  # "true" or "false" for compatibility
+    last_login = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        Index('idx_username', 'username'),
+        Index('idx_role', 'role'),
+        Index('idx_is_active', 'is_active'),
+    )
+
+
+class AuditLogEntry(Base):
+    """Database model for audit log entries."""
+    
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String(50), index=True, nullable=False)
+    user_id = Column(Integer, nullable=True)
+    username = Column(String(50), nullable=True)
+    resource_type = Column(String(50), nullable=True)
+    resource_id = Column(String(255), nullable=True)
+    action = Column(String(255), nullable=True)
+    status = Column(String(20), nullable=False)  # success, failure, partial
+    details = Column(Text, nullable=True)  # JSON details
+    ip_address = Column(String(50), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    
+    __table_args__ = (
+        Index('idx_event_type', 'event_type'),
+        Index('idx_user_id', 'user_id'),
+        Index('idx_resource_type', 'resource_type'),
+        Index('idx_timestamp', 'timestamp'),
     )
 
 

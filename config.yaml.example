@@ -7,8 +7,19 @@ app:
 
 # Storage Configuration
 storage:
-  # Provider: aws_s3, azure_blob, or gcp_storage
-  provider: aws_s3
+  # Provider: local, aws_s3, azure_blob, or gcp_storage
+  provider: local
+  
+  # Local Storage Configuration (for development/testing)
+  local:
+    # Base path for standard tier documents
+    storage_path: ./documents
+    
+    # Path for archive tier documents (after 90 days)
+    archive_path: ./documents_archive
+    
+    # Path for deep archive tier documents (after 365 days)
+    deep_archive_path: ./documents_deep_archive
   
   # AWS S3 Configuration
   aws:
@@ -35,7 +46,21 @@ storage:
 
 # Database Configuration
 database:
+  # Options: sqlite:///./document_archive.db, mysql://user:pass@host/db, postgresql://user:pass@host/db, or "iceberg"
+  # Use "iceberg" to store metadata in S3-based Iceberg tables (requires iceberg service)
   url: sqlite:///./document_archive.db
+
+# Iceberg Table Configuration (S3-based metadata storage)
+# Only used if database.url is set to "iceberg"
+iceberg:
+  # REST Catalog URI (typically Nessie or Polaris)
+  catalog_uri: "http://localhost:8181"
+  
+  # S3 endpoint for Iceberg warehouse
+  s3_endpoint: "https://s3.amazonaws.com"
+  
+  # S3 path for Iceberg warehouse
+  warehouse_path: "s3://document-archive-iceberg-warehouse"
 
 # Kafka Configuration
 kafka:
@@ -54,3 +79,26 @@ lifecycle:
   deep_archive_after_days: 365
   # How often to check for files to archive (in hours)
   check_interval_hours: 24
+# Encryption Configuration
+# Enables certificate-based encryption for documents and database entries
+encryption:
+  # Enable/disable encryption
+  enabled: false
+  
+  # Encryption algorithm to use
+  # Options: "RSA" (recommended for production) or "AES-256-GCM" (symmetric)
+  algorithm: RSA
+  
+  # Path to the public certificate (X.509 format, PEM encoded)
+  # Used for encrypting documents
+  # Generate with: openssl req -new -x509 -keyout private_key.pem -out certificate.pem -days 365 -nodes
+  certificate_path: ./certs/certificate.pem
+  
+  # Path to the private key (PEM encoded)
+  # Used for decrypting documents
+  # IMPORTANT: Keep this file secure and restrict access
+  private_key_path: ./certs/private_key.pem
+  
+  # Password for the encrypted private key (optional)
+  # Leave empty if private key is not password-protected
+  # key_password: ""

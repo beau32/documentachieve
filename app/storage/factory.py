@@ -4,6 +4,7 @@ from typing import Dict, Type
 
 from app.config import settings, StorageProvider
 from app.storage.base import BaseStorageProvider
+from app.storage.local import LocalStorageProvider
 from app.storage.aws_s3 import AWSS3Provider
 from app.storage.azure_blob import AzureBlobProvider
 from app.storage.gcp_storage import GCPStorageProvider
@@ -11,6 +12,7 @@ from app.storage.gcp_storage import GCPStorageProvider
 
 # Registry of available storage providers
 _PROVIDERS: Dict[StorageProvider, Type[BaseStorageProvider]] = {
+    StorageProvider.LOCAL: LocalStorageProvider,
     StorageProvider.AWS_S3: AWSS3Provider,
     StorageProvider.AZURE_BLOB: AzureBlobProvider,
     StorageProvider.GCP_STORAGE: GCPStorageProvider,

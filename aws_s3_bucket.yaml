@@ -1,0 +1,340 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template to provision AWS S3 bucket for Document Archive with optional Iceberg support'
+
+Parameters:
+  BucketName:
+    Type: String
+    Default: document-archive
+    Description: Name of the S3 bucket (must be globally unique)
+  
+  EnvironmentTag:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment tag for the bucket
+  
+  GlacierVaultName:
+    Type: String
+    Default: document-archive-vault
+    Description: Name of the Glacier vault for deep archival
+  
+  GlacierRestoreDays:
+    Type: Number
+    Default: 7
+    Description: Number of days to retain restored objects from Glacier
+    MinValue: 1
+    MaxValue: 365
+  
+  CreateIcebergWarehouse:
+    Type: String
+    Default: "no"
+    AllowedValues:
+      - "yes"
+      - "no"
+    Description: Create a separate S3 bucket for Iceberg warehouse metadata
+
+Conditions:
+  CreateIcebergWarehouseCondition: !Equals [!Ref CreateIcebergWarehouse, "yes"]
+
+Resources:
+  # S3 Bucket for Document Archive
+  DocumentArchiveBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${BucketName}-${AWS::AccountId}-${EnvironmentTag}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          # Move to Infrequent Access after 30 days
+          - Id: TransitionToIA
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+          
+          # Move to Glacier Instant Retrieval after 90 days
+          - Id: TransitionToGlacierIR
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 90
+                StorageClass: GLACIER_IR
+          
+          # Move to Glacier Deep Archive after 365 days
+          - Id: TransitionToDeepArchive
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 365
+                StorageClass: DEEP_ARCHIVE
+          
+          # Delete old markers and incomplete MPU after 30 days
+          - Id: CleanupOldVersions
+            Status: Enabled
+            NoncurrentVersionTransitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+              - TransitionInDays: 90
+                StorageClass: GLACIER_IR
+            NoncurrentVersionExpirationInDays: 365
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Application
+          Value: DocumentArchive
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  # Glacier Vault for Deep Archive
+  DocumentArchiveGlacierVault:
+    Type: AWS::Glacier::Vault
+    Properties:
+      VaultName: !Sub '${GlacierVaultName}-${EnvironmentTag}'
+      AccessPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowAppRoleAccess
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt DocumentArchiveAppRole.Arn
+            Action:
+              - 'glacier:DescribeVault'
+              - 'glacier:ListVaults'
+              - 'glacier:UploadArchive'
+              - 'glacier:InitiateMultipartUpload'
+              - 'glacier:UploadMultipartPart'
+              - 'glacier:CompleteMultipartUpload'
+              - 'glacier:RetrieveJobOutput'
+              - 'glacier:InitiateJob'
+              - 'glacier:ListJobs'
+            Resource: '*'
+      ArchiveRetentionPolicy:
+        RetentionDays: !Ref GlacierRestoreDays
+      NotificationPolicy:
+        SNSTopic: !GetAtt GlacierNotificationTopic.TopicArn
+        Events:
+          - ArchiveRetrievalCompleted
+          - VaultInventoryRetrievalCompleted
+      Tags:
+        - Key: Application
+          Value: DocumentArchive
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  # SNS Topic for Glacier job completion notifications
+  GlacierNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'document-archive-glacier-notifications-${EnvironmentTag}'
+      DisplayName: Glacier Job Notifications for Document Archive
+      Tags:
+        - Key: Application
+          Value: DocumentArchive
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  # SNS Topic Subscription (optional - for email notifications)
+  GlacierNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref GlacierNotificationTopic
+      Protocol: email
+      Endpoint: admin@example.com  # Change this to your email
+
+  # S3 Bucket for Iceberg Warehouse (optional)
+  IcebergWarehouseBucket:
+    Type: AWS::S3::Bucket
+    Condition: CreateIcebergWarehouseCondition
+    Properties:
+      BucketName: !Sub '${BucketName}-iceberg-warehouse-${AWS::AccountId}-${EnvironmentTag}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          # Clean up old Iceberg metadata versions after 30 days
+          - Id: CleanupOldIcebergMetadata
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 30
+      Tags:
+        - Key: Application
+          Value: IcebergWarehouse
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
+  # Bucket Policy for Iceberg
+  IcebergWarehouseBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: CreateIcebergWarehouseCondition
+    Properties:
+      Bucket: !Ref IcebergWarehouseBucket
+      PolicyText:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowAppRoleAccess
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt DocumentArchiveAppRole.Arn
+            Action:
+              - 's3:PutObject'
+              - 's3:GetObject'
+              - 's3:DeleteObject'
+              - 's3:ListBucket'
+            Resource:
+              - !GetAtt IcebergWarehouseBucket.Arn
+              - !Sub '${IcebergWarehouseBucket.Arn}/*'
+
+  # Bucket Policy
+  DocumentArchiveBucketPolicy:
+  DocumentArchiveBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DocumentArchiveBucket
+      PolicyText:
+        Version: '2012-10-17'
+        Statement:
+          # Deny unencrypted object uploads
+          - Sid: DenyUnencryptedObjectUploads
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:PutObject'
+            Resource: !Sub '${DocumentArchiveBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                's3:x-amz-server-side-encryption': 'AES256'
+          
+          # Allow bucket owner full control
+          - Sid: AllowBucketOwnerFullControl
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt DocumentArchiveBucket.Arn
+              - !Sub '${DocumentArchiveBucket.Arn}/*'
+
+  # IAM Role for application access
+  DocumentArchiveAppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DocumentArchiveAppRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+                - ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+
+  # IAM Policy for S3 Access
+  DocumentArchiveAppPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: DocumentArchiveS3Access
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # S3 Operations
+          - Effect: Allow
+            Action:
+              - 's3:PutObject'
+              - 's3:GetObject'
+              - 's3:DeleteObject'
+              - 's3:ListBucket'
+            Resource:
+              - !GetAtt DocumentArchiveBucket.Arn
+              - !Sub '${DocumentArchiveBucket.Arn}/*'
+          
+          # S3 Restore from Glacier
+          - Effect: Allow
+            Action:
+              - 's3:RestoreObject'
+            Resource: !Sub '${DocumentArchiveBucket.Arn}/*'
+          
+          # Glacier Vault Operations
+          - Effect: Allow
+            Action:
+              - 'glacier:DescribeVault'
+              - 'glacier:ListVaults'
+              - 'glacier:UploadArchive'
+              - 'glacier:InitiateMultipartUpload'
+              - 'glacier:UploadMultipartPart'
+              - 'glacier:CompleteMultipartUpload'
+              - 'glacier:AbortMultipartUpload'
+              - 'glacier:ListMultipartUploads'
+              - 'glacier:InitiateJob'
+              - 'glacier:ListJobs'
+              - 'glacier:DescribeJob'
+              - 'glacier:GetJobOutput'
+              - 'glacier:RetrieveJobOutput'
+            Resource: !GetAtt DocumentArchiveGlacierVault.VaultARN
+          
+          # SNS Notifications
+          - Effect: Allow
+            Action:
+              - 'sns:Publish'
+            Resource: !Ref GlacierNotificationTopic
+      Roles:
+        - !Ref DocumentArchiveAppRole
+
+Outputs:
+  BucketName:
+    Description: Name of the S3 bucket
+    Value: !Ref DocumentArchiveBucket
+    Export:
+      Name: !Sub '${EnvironmentTag}-DocumentArchiveBucket'
+  
+  BucketArn:
+    Description: ARN of the S3 bucket
+    Value: !GetAtt DocumentArchiveBucket.Arn
+  
+  GlacierVaultName:
+    Description: Name of the Glacier vault
+    Value: !Ref DocumentArchiveGlacierVault
+    Export:
+      Name: !Sub '${EnvironmentTag}-GlacierVault'
+  
+  GlacierVaultArn:
+    Description: ARN of the Glacier vault
+    Value: !GetAtt DocumentArchiveGlacierVault.VaultARN
+  
+  NotificationTopicArn:
+    Description: ARN of SNS topic for Glacier job notifications
+    Value: !Ref GlacierNotificationTopic
+  
+  RoleArn:
+    Description: ARN of the IAM role for application access
+    Value: !GetAtt DocumentArchiveAppRole.Arn
+    Export:
+      Name: !Sub '${EnvironmentTag}-DocumentArchiveRoleArn'
+  
+  IcebergWarehouseBucket:
+    Description: S3 bucket for Iceberg warehouse (if created)
+    Condition: CreateIcebergWarehouseCondition
+    Value: !Ref IcebergWarehouseBucket
+    Export:
+      Name: !Sub '${EnvironmentTag}-IcebergWarehouse'
+  
+  IcebergWarehousePath:
+    Description: S3 path for Iceberg warehouse
+    Condition: CreateIcebergWarehouseCondition
+    Value: !Sub 's3://${IcebergWarehouseBucket}'

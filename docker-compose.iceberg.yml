@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # Nessie REST Catalog for Iceberg
+  nessie:
+    image: ghcr.io/projectnessie/nessie:latest
+    container_name: iceberg-nessie
+    ports:
+      - "19120:19120"
+    environment:
+      # Warehouse location (can be S3, local, or other)
+      NESSIE_CATALOG__DEFAULT_WAREHOUSE: /home/nessie/warehouse
+      # Logging
+      QUARKUS_LOG_LEVEL: INFO
+    volumes:
+      # Local warehouse for testing
+      - nessie-warehouse:/home/nessie/warehouse
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:19120/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # LocalStack S3 for local testing (optional)
+  localstack:
+    image: localstack/localstack:latest
+    container_name: iceberg-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3
+      DEBUG: 1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - "${TMPDIR}localstack:/tmp/localstack"
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "awslocal", "s3", "ls"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Jupyter for interactive queries (optional)
+  jupyter:
+    image: jupyter/pyspark-notebook:latest
+    container_name: iceberg-jupyter
+    ports:
+      - "8888:8888"
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+    depends_on:
+      - nessie
+    networks:
+      - iceberg-network
+
+volumes:
+  nessie-warehouse:
+
+networks:
+  iceberg-network:
+    driver: bridge
+
+# Usage:
+# docker-compose -f docker-compose.iceberg.yml up -d
+#
+# Then test:
+# curl http://localhost:19120/v1/health
+# aws --endpoint-url http://localhost:4566 s3 ls
