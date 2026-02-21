@@ -183,6 +183,23 @@ class LocalStorageProvider(BaseStorageProvider):
             logger.error(f"Delete failed: {e}")
             return False
     
+    async def exists(self, storage_path: str) -> bool:
+        """
+        Check if a document exists in local storage.
+        
+        Args:
+            storage_path: Path to the document
+            
+        Returns:
+            True if document exists
+        """
+        try:
+            path = Path(storage_path)
+            return path.exists()
+        except Exception as e:
+            logger.error(f"Exists check failed: {e}")
+            return False
+    
     async def archive_to_tier(
         self,
         storage_path: str,
@@ -258,10 +275,28 @@ class LocalStorageProvider(BaseStorageProvider):
                 message=f"Archive failed: {str(e)}"
             )
     
+    async def move_to_archive(
+        self,
+        storage_path: str,
+        storage_tier: str
+    ) -> ArchiveResult:
+        """
+        Move a document to archive/deep archive storage tier.
+        
+        Args:
+            storage_path: Path to the document in storage
+            storage_tier: Target storage tier (archive, deep_archive)
+            
+        Returns:
+            ArchiveResult with operation status
+        """
+        return await self.archive_to_tier(storage_path, storage_tier)
+    
     async def restore_from_archive(
         self,
         storage_path: str,
-        restore_days: int = 7
+        restore_days: int = 7,
+        restore_tier: str = "Standard"
     ) -> RestoreResult:
         """
         Restore a document from archive (move back to standard tier for limited time).
@@ -269,6 +304,7 @@ class LocalStorageProvider(BaseStorageProvider):
         Args:
             storage_path: Current archive path
             restore_days: Days to keep restored
+            restore_tier: Restore speed tier (not used for local storage)
             
         Returns:
             RestoreResult with restoration status
@@ -327,6 +363,70 @@ class LocalStorageProvider(BaseStorageProvider):
             return RestoreResult(
                 success=False,
                 message=f"Restore failed: {str(e)}",
+                is_retrievable=False
+            )
+    
+    async def get_archive_status(self, storage_path: str) -> RestoreResult:
+        """
+        Get the archive/restore status of a document.
+        
+        Args:
+            storage_path: Path to the document in storage
+            
+        Returns:
+            RestoreResult with current status
+        """
+        try:
+            path = Path(storage_path)
+            
+            if not path.exists():
+                return RestoreResult(
+                    success=False,
+                    message=f"Document not found at {storage_path}",
+                    restore_status="not_found",
+                    is_retrievable=False
+                )
+            
+            # Check metadata for archive/restore status
+            meta_path = self._get_metadata_path(path)
+            
+            if meta_path.exists():
+                with open(meta_path, 'r') as f:
+                    meta_data = json.load(f)
+                
+                restore_status = meta_data.get("restore_status", RestoreStatus.AVAILABLE.value)
+                restore_expiry = meta_data.get("restore_expiry")
+                storage_tier = meta_data.get("storage_tier", StorageTier.STANDARD.value)
+                
+                # Check if restore is expired
+                is_retrievable = True
+                if restore_expiry:
+                    expiry_dt = datetime.fromisoformat(restore_expiry)
+                    if expiry_dt < datetime.utcnow():
+                        restore_status = RestoreStatus.EXPIRED.value
+                        is_retrievable = False
+                
+                return RestoreResult(
+                    success=True,
+                    message=f"Document status: {restore_status} (tier: {storage_tier})",
+                    restore_status=restore_status,
+                    restore_expiry=restore_expiry,
+                    is_retrievable=is_retrievable
+                )
+            else:
+                # No metadata, assume available
+                return RestoreResult(
+                    success=True,
+                    message="Document is available",
+                    restore_status=RestoreStatus.AVAILABLE.value,
+                    is_retrievable=True
+                )
+        
+        except Exception as e:
+            logger.error(f"Failed to get archive status: {e}")
+            return RestoreResult(
+                success=False,
+                message=f"Failed to get archive status: {str(e)}",
                 is_retrievable=False
             )
     
