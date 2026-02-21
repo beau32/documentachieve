@@ -43,7 +43,7 @@ services:
     image: cloud-document-archive:latest
     depends_on:
       kafka:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "8000:8000"
     environment:

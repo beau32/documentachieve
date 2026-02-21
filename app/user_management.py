@@ -387,3 +387,19 @@ class UserManagementService:
             "full_name": user.full_name,
             "role": user.role,
         }
+
+
+# Global instance for singleton pattern
+_user_management_service: Optional[UserManagementService] = None
+
+
+def get_user_management_service() -> UserManagementService:
+    """Get or create the global user management service."""
+    global _user_management_service
+    
+    if _user_management_service is None:
+        from app.database import SessionLocal
+        db = SessionLocal()
+        _user_management_service = UserManagementService(db)
+    
+    return _user_management_service

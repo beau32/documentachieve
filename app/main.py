@@ -10,7 +10,7 @@ from sqlalchemy import func, text
 
 from app.config import settings
 from app.database import init_db, SessionLocal, DocumentMetadata
-from app.routes import router
+from app.routes import router, auth_router
 from app.kafka_producer import get_kafka_producer
 from app.lifecycle_service import start_lifecycle_scheduler, stop_lifecycle_scheduler
 from app.middleware import AuthMiddleware, AuditMiddleware
@@ -109,6 +109,7 @@ if settings.audit_enabled:
     logger.info("Audit middleware enabled")
 
 # Include API routes
+app.include_router(auth_router)
 app.include_router(router)
 
 

@@ -172,8 +172,33 @@ class AuditLogEntry(Base):
 
 
 def init_db():
-    """Initialize the database tables."""
+    """Initialize the database tables and create default admin user."""
     Base.metadata.create_all(bind=engine)
+    
+    # Create default admin user if it doesn't exist
+    db = SessionLocal()
+    try:
+        admin_user = db.query(User).filter(User.username == "admin").first()
+        if not admin_user:
+            # Create default admin user
+            from app.user_management import UserManagementService
+            password_hash = UserManagementService.hash_password("password")
+            admin = User(
+                username="admin",
+                email="admin@example.com",
+                full_name="Administrator",
+                password_hash=password_hash,
+                role="admin",
+                is_active=True
+            )
+            db.add(admin)
+            db.commit()
+            print("Default admin user created (username: admin, password: password)")
+    except Exception as e:
+        print(f"Could not create default admin user: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 
 def get_db() -> Session:

@@ -5,8 +5,10 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.database import get_db, User
 from app.middleware import get_current_user, require_permission, require_role
+from app.auth import get_auth_provider
+from app.user_management import UserManagementService
 from app.models import (
     ArchiveRequest, ArchiveResponse,
     RetrieveRequest, RetrieveResponse,
@@ -22,13 +24,153 @@ from app.models import (
     PIIDetectionRequest, PIIDetectionResponse,
     AnonymizeRequest, AnonymizeResponse,
     AuditLogsResponse,
-    ErrorResponse
+    ErrorResponse,
+    LoginRequest, TokenResponse, RefreshTokenRequest
 )
 from app.services import DocumentArchiveService
 from app.lifecycle_service import LifecycleService
 from app.audit_service import get_audit_service
 
 router = APIRouter(prefix="/api/v1", tags=["Document Archive"])
+auth_router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
+
+
+# Authentication Endpoints
+@auth_router.post(
+    "/login",
+    response_model=TokenResponse,
+    responses={
+        200: {"description": "Login successful, tokens returned"},
+        401: {"model": ErrorResponse, "description": "Invalid credentials"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    },
+    summary="User login",
+    description="Authenticate user with username and password to receive JWT tokens"
+)
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    """
+    Login endpoint that authenticates a user and returns JWT tokens.
+    
+    **Request Body:**
+    - username: str - The username of the user
+    - password: str - The plaintext password of the user
+    
+    **Returns:**
+    - access_token: str - JWT access token for API access
+    - refresh_token: str - JWT refresh token for token renewal
+    - token_type: str - Token type (always "bearer")
+    """
+    try:
+        # Authenticate user
+        user_data = UserManagementService.authenticate_user(db, request.username, request.password)
+        if not user_data:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
+        # Generate tokens
+        auth_provider = get_auth_provider()
+        tokens = auth_provider.create_tokens(user_data)
+        
+        return TokenResponse(
+            access_token=tokens.get("access_token"),
+            refresh_token=tokens.get("refresh_token"),
+            token_type="bearer"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {str(e)}"
+        )
+
+
+@auth_router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    responses={
+        200: {"description": "Token refresh successful"},
+        401: {"model": ErrorResponse, "description": "Invalid or expired refresh token"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    },
+    summary="Refresh access token",
+    description="Use a refresh token to obtain a new access token"
+)
+async def refresh_token(request: RefreshTokenRequest):
+    """
+    Refresh endpoint that provides a new access token using a refresh token.
+    
+    **Request Body:**
+    - refresh_token: str - The refresh token to use for renewal
+    
+    **Returns:**
+    - access_token: str - New JWT access token
+    - refresh_token: str - New JWT refresh token
+    - token_type: str - Token type (always "bearer")
+    """
+    try:
+        auth_provider = get_auth_provider()
+        
+        # Verify and refresh the token
+        result = auth_provider.refresh_access_token(request.refresh_token)
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
+        return TokenResponse(
+            access_token=result.get("access_token"),
+            refresh_token=result.get("refresh_token"),
+            token_type="bearer"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Token refresh failed: {str(e)}"
+        )
+
+
+@auth_router.post(
+    "/logout",
+    responses={
+        200: {"description": "Logout successful"},
+        401: {"model": ErrorResponse, "description": "Unauthorized"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    },
+    summary="User logout",
+    description="Invalidate the current user's tokens"
+)
+async def logout(current_user: User = Depends(get_current_user)):
+    """
+    Logout endpoint that invalidates the current user's session.
+    
+    **Authentication:** Requires valid Bearer token in Authorization header
+    
+    **Returns:**
+    - message: str - Confirmation of logout
+    """
+    try:
+        # In a production system, you might:
+        # - Add token to a blacklist
+        # - Invalidate user session
+        # - Log the logout event
+        
+        # Note: Audit logging on logout is optional to avoid circular dependencies
+        # Logging is handled by AuditMiddleware
+        
+        return {"message": "Successfully logged out"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Logout failed: {str(e)}"
+        )
 
 
 @router.post(

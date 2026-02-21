@@ -18,7 +18,7 @@ from starlette.responses import Response, JSONResponse
 from starlette.types import ASGIApp
 
 from app.auth import get_auth_provider
-from app.audit_service import get_audit_service, AuditEventType, AuditStatus
+from app.audit_service import get_audit_service, AuditLog, AuditEventType, AuditStatus
 from app.user_management import get_user_management_service
 from app.config import settings
 
@@ -152,17 +152,14 @@ class AuditMiddleware(BaseHTTPMiddleware):
     ENDPOINT_EVENT_TYPES = {
         "/auth/login": AuditEventType.LOGIN,
         "/auth/logout": AuditEventType.LOGOUT,
-        "/auth/refresh": AuditEventType.LOGIN,
-        "/users": AuditEventType.USER_CREATED,
+        "/auth/refresh": AuditEventType.TOKEN_REFRESH,
+        "/users": AuditEventType.USER_CREATE,
         "/documents": AuditEventType.DOCUMENT_UPLOAD,
         "/archive": AuditEventType.DOCUMENT_UPLOAD,
-        "/retrieve": AuditEventType.DOCUMENT_DOWNLOAD,
+        "/retrieve": AuditEventType.DOCUMENT_RETRIEVE,
         "/delete": AuditEventType.DOCUMENT_DELETE,
-        "/search": AuditEventType.DOCUMENT_SEARCH,
-        "/anonymize": AuditEventType.DOCUMENT_VIEW,
-        "/audit/logs": AuditEventType.AUDIT_LOG_ACCESS,
-        "/roles": AuditEventType.ROLE_ASSIGNMENT,
-        "/permissions": AuditEventType.PERMISSION_CHANGE,
+        "/roles": AuditEventType.ROLE_CREATE,
+        "/permissions": AuditEventType.PERMISSION_GRANT,
     }
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -235,24 +232,43 @@ class AuditMiddleware(BaseHTTPMiddleware):
             # Log the event
             try:
                 audit_service = get_audit_service()
-                await audit_service.log_event(
-                    event_type=event_type,
+                # Convert string event_type to AuditEventType enum
+                try:
+                    if isinstance(event_type, str):
+                        # Try to match the string to an enum value
+                        event_enum = None
+                        for evt in AuditEventType:
+                            if evt.value == event_type:
+                                event_enum = evt
+                                break
+                        if event_enum:
+                            event_type = event_enum
+                        else:
+                            # Default to a generic event type
+                            event_type = AuditEventType.DOCUMENT_UPLOAD
+                except:
+                    event_type = AuditEventType.DOCUMENT_UPLOAD
+                
+                # Create AuditLog object
+                audit_log = AuditLog(
+                    event_type=event_type if isinstance(event_type, AuditEventType) else AuditEventType.DOCUMENT_UPLOAD,
                     user_id=user_id,
                     username=username,
                     resource_type=self._get_resource_type(request.url.path),
                     resource_id=self._get_resource_id(request),
                     action=request.method,
-                    status=audit_status,
-                    http_method=request.method,
-                    http_endpoint=str(request.url.path),
-                    http_status=http_status,
-                    ip_address=client_ip,
-                    user_agent=user_agent,
+                    status=AuditStatus.SUCCESS if 200 <= http_status < 300 else (AuditStatus.PARTIAL if 300 <= http_status < 400 else AuditStatus.FAILURE),
                     details={
                         "execution_time_ms": round(execution_time * 1000, 2),
                         "query_params": dict(request.query_params),
-                    }
+                        "http_status": http_status,
+                        "http_endpoint": str(request.url.path),
+                    },
+                    ip_address=client_ip,
+                    user_agent=user_agent
                 )
+                # Log without await (it's not async)
+                audit_service.log_event(audit_log)
             except Exception as e:
                 logger.error(f"Failed to log audit event: {e}")
         
