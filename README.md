@@ -245,6 +245,39 @@ Supports filtering by:
 - Compliance details: [USER_MANAGEMENT.md#compliance](USER_MANAGEMENT.md#compliance)
 - Phase 2 summary: [PHASE2_SUMMARY.md](PHASE2_SUMMARY.md)
 
+## Command-Line Interface (CLI)
+
+Manage files, users, and audit logs from the command line:
+
+**Installation:**
+```bash
+pip install -r requirements.txt
+# Or for development with entry point:
+pip install -e .
+```
+
+**Quick Examples:**
+```bash
+# User management
+archive-cli users create --username john --email john@example.com --role archive_manager
+archive-cli users list
+archive-cli users assign-role john --role admin
+
+# File operations
+archive-cli files copy /source/docs /archive/docs --force
+archive-cli files overwrite new.txt old.txt --backup
+archive-cli files delete /temp --recursive --force
+
+# Audit logs
+archive-cli logs retrieve --start-date 2026-02-21 --status success --limit 50
+archive-cli logs summary --days 7
+archive-cli logs export --start-date 2026-02-01 --end-date 2026-02-28 --output audit.csv
+```
+
+**Documentation:**
+- Complete guide: [CLI_GUIDE.md](CLI_GUIDE.md)
+- Quick reference: [CLI_QUICKREF.md](CLI_QUICKREF.md)
+
 ## Encryption
 
 Documents and metadata can be encrypted using certificate-based encryption with RSA+AES-256-GCM hybrid approach:

@@ -1,6 +1,8 @@
 """API routes for the document archive application."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -18,10 +20,12 @@ from app.models import (
     VectorSearchRequest, VectorSearchResponse,
     PIIDetectionRequest, PIIDetectionResponse,
     AnonymizeRequest, AnonymizeResponse,
+    AuditLogsResponse,
     ErrorResponse
 )
 from app.services import DocumentArchiveService
 from app.lifecycle_service import LifecycleService
+from app.audit_service import get_audit_service
 
 router = APIRouter(prefix="/api/v1", tags=["Document Archive"])
 
@@ -656,4 +660,115 @@ async def anonymize_document(
         )
     
     return response
+
+
+@router.get(
+    "/audit/logs",
+    response_model=AuditLogsResponse,
+    responses={
+        200: {"description": "Audit logs retrieved successfully"},
+        400: {"model": ErrorResponse, "description": "Invalid date format"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    },
+    summary="Retrieve audit logs",
+    description="Query audit logs for a given period with optional filters"
+)
+async def get_audit_logs(
+    start_date: Optional[str] = Query(None, description="Start date (ISO format: YYYY-MM-DDTHH:MM:SS)"),
+    end_date: Optional[str] = Query(None, description="End date (ISO format: YYYY-MM-DDTHH:MM:SS)"),
+    event_type: Optional[str] = Query(None, description="Filter by event type (e.g., login, document_upload)"),
+    user_id: Optional[int] = Query(None, description="Filter by user ID"),
+    resource_type: Optional[str] = Query(None, description="Filter by resource type (e.g., document, user)"),
+    status: Optional[str] = Query(None, description="Filter by status (success, failure, partial)"),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
+    db: Session = Depends(get_db)
+) -> AuditLogsResponse:
+    """
+    Retrieve audit logs for a given period with optional filtering.
+    
+    **Parameters:**
+    - **start_date**: ISO format start date (e.g., 2026-02-01T00:00:00)
+    - **end_date**: ISO format end date (e.g., 2026-02-28T23:59:59)
+    - **event_type**: Filter by event type (login, logout, document_upload, etc.)
+    - **user_id**: Filter by specific user ID
+    - **resource_type**: Filter by resource type (document, user, role, etc.)
+    - **status**: Filter by operation status (success, failure, partial)
+    - **skip**: Pagination offset
+    - **limit**: Maximum results to return
+    
+    **Example:**
+    ```
+    GET /api/v1/audit/logs?start_date=2026-02-21T00:00:00&end_date=2026-02-21T23:59:59&event_type=document_upload
+    ```
+    
+    Returns list of audit log entries matching the criteria.
+    """
+    try:
+        # Parse dates if provided
+        start = None
+        end = None
+        
+        if start_date:
+            try:
+                start = datetime.fromisoformat(start_date)
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid start_date format. Use ISO format: YYYY-MM-DDTHH:MM:SS"
+                )
+        
+        if end_date:
+            try:
+                end = datetime.fromisoformat(end_date)
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid end_date format. Use ISO format: YYYY-MM-DDTHH:MM:SS"
+                )
+        
+        # Get audit service and retrieve logs
+        audit_service = get_audit_service()
+        logs = audit_service.get_audit_logs(
+            event_type=event_type,
+            user_id=user_id,
+            resource_type=resource_type,
+            status=status,
+            start_date=start,
+            end_date=end,
+            offset=skip,
+            limit=limit
+        )
+        
+        # Convert logs to dictionaries
+        log_list = [log.to_dict() if hasattr(log, 'to_dict') else {
+            "id": getattr(log, 'id', None),
+            "timestamp": str(getattr(log, 'created_at', getattr(log, 'timestamp', ''))),
+            "event_type": getattr(log, 'event_type', ''),
+            "user_id": getattr(log, 'user_id', None),
+            "username": getattr(log, 'username', ''),
+            "resource_type": getattr(log, 'resource_type', ''),
+            "resource_id": getattr(log, 'resource_id', ''),
+            "action": getattr(log, 'action', ''),
+            "status": getattr(log, 'status', ''),
+            "ip_address": getattr(log, 'ip_address', ''),
+            "user_agent": getattr(log, 'user_agent', ''),
+            "http_method": getattr(log, 'http_method', ''),
+            "http_endpoint": getattr(log, 'http_endpoint', ''),
+            "http_status": getattr(log, 'http_status', None),
+            "details": getattr(log, 'details', {})
+        } for log in logs]
+        
+        return AuditLogsResponse(
+            logs=log_list,
+            total=len(log_list),
+            skip=skip,
+            limit=limit
+        )
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve audit logs: {str(e)}"
+        )
 
