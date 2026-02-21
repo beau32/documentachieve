@@ -186,6 +186,7 @@ class AuthProvider:
         """
         token_data = {
             "sub": str(user_data["id"]),
+            "user_id": str(user_data["id"]),
             "username": user_data["username"],
             "email": user_data.get("email", ""),
             "role": user_data.get("role", "user"),
