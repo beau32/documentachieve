@@ -294,7 +294,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if method == "POST":
             return AuditEventType.DOCUMENT_UPLOAD
         elif method == "GET":
-            return AuditEventType.DOCUMENT_VIEW
+            return AuditEventType.DOCUMENT_RETRIEVE
         elif method == "PUT" or method == "PATCH":
             return AuditEventType.DOCUMENT_UPLOAD
         elif method == "DELETE":
