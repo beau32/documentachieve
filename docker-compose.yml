@@ -40,6 +40,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: cloud-document-archive:latest
     depends_on:
       kafka:
         condition: service_healthy
@@ -90,6 +91,18 @@ services:
       LIFECYCLE_ARCHIVE_AFTER_DAYS: "90"
       LIFECYCLE_DEEP_ARCHIVE_AFTER_DAYS: "365"
       LIFECYCLE_CHECK_INTERVAL_HOURS: "24"
+      
+      # Authentication & Authorization (Phase 2)
+      AUTH_ENABLED: "true"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:-change-this-secret-key-in-production}"
+      JWT_ACCESS_TOKEN_EXPIRES: "30"
+      JWT_REFRESH_TOKEN_EXPIRES: "7"
+      
+      # Audit Trail Logging (Phase 2)
+      AUDIT_ENABLED: "true"
+      AUDIT_LOG_FILE: "./data/audit.log"
+      AUDIT_INCLUDE_REQUEST_BODY: "false"
+      AUDIT_INCLUDE_RESPONSE_BODY: "false"
     
     volumes:
       - ./data:/app/data
