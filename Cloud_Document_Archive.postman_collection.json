@@ -1,10 +1,51 @@
 {
   "info": {
-    "_postman_id": "cloud-document-archive-api",
-    "name": "Cloud Document Archive API",
-    "description": "Collection for Cloud Document Archive API\n\nA multi-cloud document archiving service supporting AWS S3, Azure Blob Storage, and Google Cloud Storage.",
+    "_postman_id": "cloud-document-archive-api-v2",
+    "name": "Cloud Document Archive API v2.0.0",
+    "description": "Complete Postman collection for Cloud Document Archive API v2.0.0\n\nIncludes:\n- Authentication (JWT)\n- User Management & RBAC\n- Document Operations\n- Audit Trail\n- Encryption Support\n\nBase URL: http://localhost:8000\nDefault admin credentials: admin / password",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT access token (auto-filled after login)"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT refresh token (auto-filled after login)"
+    },
+    {
+      "key": "username",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "password",
+      "type": "string"
+    },
+    {
+      "key": "document_id",
+      "value": "",
+      "type": "string",
+      "description": "Document ID (auto-filled after archive)"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string",
+      "description": "User ID"
+    }
+  ],
   "item": [
     {
       "name": "Health & Status",
@@ -40,16 +81,127 @@
       ]
     },
     {
-      "name": "Document Archive",
+      "name": "Authentication",
       "item": [
         {
-          "name": "Archive Document",
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('access_token', jsonData.access_token);",
+                  "    pm.environment.set('refresh_token', jsonData.refresh_token);",
+                  "    pm.test('Login successful - tokens set', () => {",
+                  "        pm.expect(jsonData).to.have.property('access_token');",
+                  "        pm.expect(jsonData).to.have.property('refresh_token');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Login with username and password to get JWT tokens\n\nDefault credentials:\n- username: admin\n- password: password"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "refresh"]
+            },
+            "description": "Get a new access token using the refresh token"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "logout"]
+            },
+            "description": "Logout and invalidate tokens"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Document Operations",
+      "item": [
+        {
+          "name": "Archive Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('document_id', jsonData.document_id);",
+                  "    pm.test('Document archived - ID set', () => {",
+                  "        pm.expect(jsonData).to.have.property('document_id');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
                 "type": "text"
               }
             ],
@@ -62,18 +214,22 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "archive"]
             },
-            "description": "Archive a new document with tags and metadata"
+            "description": "Archive a new document with tags and metadata\n\nRequires: document_upload permission"
           },
           "response": []
         },
         {
-          "name": "Retrieve Document (POST)",
+          "name": "Retrieve Document",
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
                 "type": "text"
               }
             ],
@@ -86,21 +242,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "retrieve"]
             },
-            "description": "Retrieve a document using POST method"
-          },
-          "response": []
-        },
-        {
-          "name": "Retrieve Document (GET)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/v1/retrieve/{{document_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "retrieve", "{{document_id}}"]
-            },
-            "description": "Retrieve a document using GET method with document_id in URL"
+            "description": "Retrieve a document\n\nRequires: document_download permission"
           },
           "response": []
         },
@@ -108,233 +250,357 @@
           "name": "Delete Document",
           "request": {
             "method": "DELETE",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/archive/{{document_id}}",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "archive", "{{document_id}}"]
             },
-            "description": "Permanently delete a document from archive and database"
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Deep Archive & Restoration",
-      "item": [
-        {
-          "name": "Move to Deep Archive",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"storage_tier\": \"deep_archive\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/deep-archive",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "deep-archive"]
-            },
-            "description": "Move a document to deep archive (Glacier, Azure Archive, etc.)"
+            "description": "Delete a document from archive\n\nRequires: document_delete permission"
           },
           "response": []
         },
         {
-          "name": "Restore from Deep Archive",
+          "name": "Vector Search",
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"restore_days\": 7,\n  \"restore_tier\": \"Standard\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/restore",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "restore"]
-            },
-            "description": "Restore a document from deep archive"
-          },
-          "response": []
-        },
-        {
-          "name": "Get Archive Status",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/v1/archive-status/{{document_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "archive-status", "{{document_id}}"]
-            },
-            "description": "Check the current archive/restore status of a document"
-          },
-          "response": []
-        },
-        {
-          "name": "Retrieve from Glacier",
-          "request": {
-            "method": "POST",
-            "header": [
+                "value": "application/json"
+              },
               {
-                "key": "Content-Type",
-                "value": "application/json",
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
                 "type": "text"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"restore_tier\": \"standard\",\n  \"restore_days\": 7\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/glacier/retrieve",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "glacier", "retrieve"]
-            },
-            "description": "Retrieve a document from Glacier storage with automatic restore"
-          },
-          "response": []
-        },
-        {
-          "name": "Retrieve from Glacier (GET)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/v1/glacier/retrieve/{{document_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "glacier", "retrieve", "{{document_id}}"]
-            },
-            "description": "Retrieve a document from Glacier using GET method"
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Reports & Analytics",
-      "item": [
-        {
-          "name": "Generate Report",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"start_date\": \"2026-01-01T00:00:00\",\n  \"end_date\": \"2026-02-17T23:59:59\",\n  \"group_by\": \"department\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/report",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "report"]
-            },
-            "description": "Generate metrics report for a time period with optional grouping"
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Search & Discovery",
-      "item": [
-        {
-          "name": "Vector Semantic Search",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"quarterly financial report\",\n  \"top_k\": 5,\n  \"min_similarity\": 0.5\n}"
+              "raw": "{\n  \"query\": \"financial report\",\n  \"top_k\": 5,\n  \"threshold\": 0.7\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/search",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "search"]
             },
-            "description": "Perform semantic search to find similar documents based on query text"
+            "description": "Perform semantic/vector search on documents"
           },
           "response": []
         }
       ]
     },
     {
-      "name": "Lifecycle Management",
+      "name": "User Management",
       "item": [
         {
-          "name": "Run Lifecycle Archival",
+          "name": "Create User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('user_id', jsonData.user_id);",
+                  "    pm.test('User created - ID set', () => {",
+                  "        pm.expect(jsonData).to.have.property('user_id');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
                 "type": "text"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"dry_run\": false\n}"
+              "raw": "{\n  \"username\": \"john.doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"full_name\": \"John Doe\",\n  \"role\": \"user\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/v1/lifecycle/archive",
+              "raw": "{{base_url}}/api/v1/users/create",
               "host": ["{{base_url}}"],
-              "path": ["api", "v1", "lifecycle", "archive"]
+              "path": ["api", "v1", "users", "create"]
             },
-            "description": "Manually trigger lifecycle archival to move old documents to deep archive"
+            "description": "Create a new user\n\nRoles: admin, archive_manager, auditor, user, viewer\n\nRequires: user_create permission"
           },
           "response": []
         },
         {
-          "name": "Check Restore Status",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/v1/lifecycle/check-restores",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "lifecycle", "check-restores"]
-            },
-            "description": "Check all pending restores and publish Kafka events for completed restores"
-          },
-          "response": []
-        },
-        {
-          "name": "List Eligible Documents",
+          "name": "List Users",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
             "url": {
-              "raw": "{{base_url}}/api/v1/lifecycle/eligible",
+              "raw": "{{base_url}}/api/v1/users",
               "host": ["{{base_url}}"],
-              "path": ["api", "v1", "lifecycle", "eligible"]
+              "path": ["api", "v1", "users"]
             },
-            "description": "List documents eligible for lifecycle archival based on configured thresholds"
+            "description": "List all users in the system"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "{{user_id}}"]
+            },
+            "description": "Get information about a specific user"
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"role\": \"archive_manager\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/assign-role",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "assign-role"]
+            },
+            "description": "Assign a role to a user\n\nRoles: admin, archive_manager, auditor, user, viewer\n\nRequires: role_assign permission"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "{{user_id}}"]
+            },
+            "description": "Delete a user from the system\n\nRequires: user_delete permission"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Audit & Compliance",
+      "item": [
+        {
+          "name": "Get Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit/logs?start_date=2026-02-01T00:00:00&end_date=2026-02-28T23:59:59&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "audit", "logs"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2026-02-01T00:00:00",
+                  "description": "ISO format start date (YYYY-MM-DDTHH:MM:SS)"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2026-02-28T23:59:59",
+                  "description": "ISO format end date (YYYY-MM-DDTHH:MM:SS)"
+                },
+                {
+                  "key": "event_type",
+                  "value": "document_upload",
+                  "disabled": true,
+                  "description": "Filter by event type (login, logout, document_upload, document_delete, user_create, etc.)"
+                },
+                {
+                  "key": "user_id",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Filter by user ID"
+                },
+                {
+                  "key": "resource_type",
+                  "value": "document",
+                  "disabled": true,
+                  "description": "Filter by resource type (document, user, audit_log, etc.)"
+                },
+                {
+                  "key": "status",
+                  "value": "success",
+                  "disabled": true,
+                  "description": "Filter by status (success, failure, partial)"
+                },
+                {
+                  "key": "skip",
+                  "value": "0",
+                  "disabled": true,
+                  "description": "Pagination offset"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "disabled": true,
+                  "description": "Records per page (max 1000)"
+                }
+              ]
+            },
+            "description": "Retrieve audit logs for a given period with optional filters\n\nRequires: audit_read permission"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Audit Logs by Event Type",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit/logs?start_date=2026-02-21T00:00:00&end_date=2026-02-21T23:59:59&event_type=document_upload&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "audit", "logs"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2026-02-21T00:00:00"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2026-02-21T23:59:59"
+                },
+                {
+                  "key": "event_type",
+                  "value": "document_upload"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get audit logs filtered by event type"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Lifecycle & Archiving",
+      "item": [
+        {
+          "name": "Deep Archive Document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"storage_tier\": \"glacier\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/deep-archive",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "deep-archive"]
+            },
+            "description": "Move document to deep archive (Glacier)"
+          },
+          "response": []
+        },
+        {
+          "name": "Restore from Archive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_id\": \"{{document_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/restore",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "restore"]
+            },
+            "description": "Restore document from archive"
           },
           "response": []
         }
@@ -351,6 +617,11 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
               }
             ],
             "body": {
@@ -362,7 +633,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "detect-pii"]
             },
-            "description": "Scan a document for personally identifiable information (PII)\n\nDetects: emails, phone numbers, SSNs, credit cards, IP addresses, names, addresses, dates of birth"
+            "description": "Scan a document for Personally Identifiable Information\n\nDetects: emails, phone numbers, SSNs, credit cards, IP addresses, names"
           },
           "response": []
         },
@@ -374,33 +645,27 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"pii_types\": null,\n  \"mask_mode\": \"redact\",\n  \"save_anonymized_version\": true\n}"
+              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"pii_types\": [\"email\", \"phone\", \"ssn\"]\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/anonymize",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "anonymize"]
             },
-            "description": "Remove or redact personally identifiable information from a document\n\nMask modes:\n- redact: Replace PII with [TYPE] placeholder\n- remove: Delete PII from document\n\nCan save anonymized version as new archived document"
+            "description": "Anonymize PII in document (redact or remove sensitive information)"
           },
           "response": []
         }
       ]
-    }
-  "variable": [
-    {
-      "key": "base_url",
-      "value": "http://localhost:8000",
-      "type": "string"
-    },
-    {
-      "key": "document_id",
-      "value": "a1b2c3d4e5f6abcd1234567890abcdef",
-      "type": "string"
     }
   ]
 }
