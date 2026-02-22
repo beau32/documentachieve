@@ -176,10 +176,36 @@ class AuditService:
         return message
     
     def _log_to_database(self, audit_log: AuditLog) -> None:
-        """Log to database (to be implemented with database session)."""
-        # This will be called from routes with database session
-        # For now, just log to file
-        pass
+        """Log to database."""
+        try:
+            from app.database import SessionLocal, AuditLogEntry
+            import json
+            
+            db = SessionLocal()
+            try:
+                # Create AuditLogEntry from AuditLog
+                db_log = AuditLogEntry(
+                    event_type=audit_log.event_type.value if hasattr(audit_log.event_type, 'value') else str(audit_log.event_type),
+                    user_id=audit_log.user_id,
+                    username=audit_log.username,
+                    resource_type=audit_log.resource_type,
+                    resource_id=audit_log.resource_id,
+                    action=audit_log.action,
+                    status=audit_log.status.value if hasattr(audit_log.status, 'value') else str(audit_log.status),
+                    details=json.dumps(audit_log.details) if audit_log.details else None,
+                    ip_address=audit_log.ip_address,
+                    user_agent=audit_log.user_agent,
+                    timestamp=audit_log.timestamp if hasattr(audit_log, 'timestamp') else datetime.utcnow()
+                )
+                db.add(db_log)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Database error logging audit event: {e}")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Failed to log to database: {e}")
     
     async def get_audit_logs(
         self,

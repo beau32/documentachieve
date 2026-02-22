@@ -47,8 +47,13 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # GitHub Repository (auto-pull on startup)
+      GITHUB_REPO_URL: "https://github.com/beau32/documentachieve.git"
+      GITHUB_BRANCH: "main"
+      
       # Application
       DEBUG: "false"
+      RELOAD_ON_CHANGE: "true"
       
       # Storage Provider (local, aws_s3, azure_blob, or gcp_storage)
       STORAGE_PROVIDER: "local"

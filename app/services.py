@@ -1103,6 +1103,7 @@ class DocumentArchiveService:
                     document_id=request.document_id,
                     original_filename="unknown",
                     total_piis_anonymized=0,
+                    mask_mode_used=request.mask_mode,
                     message="Document not found"
                 )
             
@@ -1122,6 +1123,7 @@ class DocumentArchiveService:
                     document_id=request.document_id,
                     original_filename=doc.filename,
                     total_piis_anonymized=0,
+                    mask_mode_used=request.mask_mode,
                     message=f"Could not retrieve document: {str(e)}"
                 )
             
@@ -1211,5 +1213,6 @@ class DocumentArchiveService:
                 document_id=request.document_id,
                 original_filename="unknown",
                 total_piis_anonymized=0,
+                mask_mode_used="redact",
                 message=f"Error during anonymization: {str(e)}"
             )

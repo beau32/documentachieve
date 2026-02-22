@@ -1,5 +1,6 @@
 """API routes for the document archive application."""
 
+import json
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
@@ -188,7 +189,7 @@ async def archive_document(
     request: ArchiveRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
-    permission: str = Depends(require_permission("document_upload"))
+    permission: str = Depends(require_permission("document:create"))
 ) -> ArchiveResponse:
     """
     Archive a document to cloud storage.
@@ -228,7 +229,7 @@ async def delete_document(
     document_id: str,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
-    permission: str = Depends(require_permission("document_delete"))
+    permission: str = Depends(require_permission("document:delete"))
 ) -> DeleteResponse:
     """
     Delete a document from the archive.
@@ -264,7 +265,7 @@ async def retrieve_document(
     request: RetrieveRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
-    permission: str = Depends(require_permission("document_download"))
+    permission: str = Depends(require_permission("document:read"))
 ) -> RetrieveResponse:
     """
     Retrieve a document from cloud storage.
@@ -828,12 +829,12 @@ async def get_audit_logs(
     event_type: Optional[str] = Query(None, description="Filter by event type (e.g., login, document_upload)"),
     user_id: Optional[int] = Query(None, description="Filter by user ID"),
     resource_type: Optional[str] = Query(None, description="Filter by resource type (e.g., document, user)"),
-    status: Optional[str] = Query(None, description="Filter by status (success, failure, partial)"),
+    log_status: Optional[str] = Query(None, description="Filter by status (success, failure, partial)"),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
-    permission: str = Depends(require_permission("audit_read"))
+    permission: str = Depends(require_permission("audit:read"))
 ) -> AuditLogsResponse:
     """
     Retrieve audit logs for a given period with optional filtering.
@@ -880,37 +881,42 @@ async def get_audit_logs(
         
         # Get audit service and retrieve logs
         audit_service = get_audit_service()
-        logs = audit_service.get_audit_logs(
+        logs = await audit_service.get_audit_logs(
+            db=db,
             event_type=event_type,
             user_id=user_id,
             resource_type=resource_type,
-            status=status,
             start_date=start,
             end_date=end,
-            offset=skip,
             limit=limit
         )
         
-        # Convert logs to dictionaries
-        log_list = [log.to_dict() if hasattr(log, 'to_dict') else {
-            "id": getattr(log, 'id', None),
-            "timestamp": str(getattr(log, 'created_at', getattr(log, 'timestamp', ''))),
-            "event_type": getattr(log, 'event_type', ''),
-            "user_id": getattr(log, 'user_id', None),
-            "username": getattr(log, 'username', ''),
-            "resource_type": getattr(log, 'resource_type', ''),
-            "resource_id": getattr(log, 'resource_id', ''),
-            "action": getattr(log, 'action', ''),
-            "status": getattr(log, 'status', ''),
-            "ip_address": getattr(log, 'ip_address', ''),
-            "user_agent": getattr(log, 'user_agent', ''),
-            "http_method": getattr(log, 'http_method', ''),
-            "http_endpoint": getattr(log, 'http_endpoint', ''),
-            "http_status": getattr(log, 'http_status', None),
-            "details": getattr(log, 'details', {})
-        } for log in logs]
+        # Convert logs to dictionaries - handle both dict and ORM objects
+        log_list = []
+        for log in logs:
+            if isinstance(log, dict):
+                # Already a dictionary from service
+                log_dict = log
+            else:
+                # ORM object - convert to dict
+                log_dict = {
+                    "id": log.id if log.id else 0,
+                    "timestamp": log.timestamp.isoformat() if log.timestamp else "",
+                    "event_type": log.event_type or "",
+                    "user_id": log.user_id,
+                    "username": log.username or "",
+                    "resource_type": log.resource_type or "",
+                    "resource_id": log.resource_id or "",
+                    "action": log.action or "",
+                    "status": log.status or "",
+                    "ip_address": log.ip_address or "",
+                    "user_agent": log.user_agent or "",
+                    "details": json.loads(log.details) if log.details and isinstance(log.details, str) else (log.details or {})
+                }
+            log_list.append(log_dict)
         
         return AuditLogsResponse(
+            success=True,
             logs=log_list,
             total=len(log_list),
             skip=skip,

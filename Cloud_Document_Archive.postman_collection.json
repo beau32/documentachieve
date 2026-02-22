@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "cloud-document-archive-api-v2",
     "name": "Cloud Document Archive API v2.0.0",
-    "description": "Complete Postman collection for Cloud Document Archive API v2.0.0\n\nIncludes:\n- Authentication (JWT)\n- User Management & RBAC\n- Document Operations\n- Audit Trail\n- Encryption Support\n\nBase URL: http://localhost:8000\nDefault admin credentials: admin / password",
+    "description": "Complete Postman collection for Cloud Document Archive API v2.0.0\n\nIncludes:\n- Authentication (JWT)\n- Document Operations (Archive, Retrieve, Delete, Search)\n- Deep Archive & Glacier Management\n- Lifecycle & Restore Management  \n- PII Detection & Anonymization\n- Audit Trail\n\nBase URL: http://localhost:8000\nDefault admin credentials: admin / password",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -267,6 +267,54 @@
           "response": []
         },
         {
+          "name": "Retrieve Document by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/retrieve/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "retrieve", "{{document_id}}"]
+            },
+            "description": "Retrieve a document by ID (GET method)"
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start_date\": \"2026-02-01T00:00:00\",\n  \"end_date\": \"2026-02-28T23:59:59\",\n  \"group_by\": \"department\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/report",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "report"]
+            },
+            "description": "Generate metrics report for archived documents within a time period"
+          },
+          "response": []
+        },
+        {
           "name": "Vector Search",
           "request": {
             "method": "POST",
@@ -283,7 +331,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"query\": \"financial report\",\n  \"top_k\": 5,\n  \"threshold\": 0.7\n}"
+              "raw": "{\n  \"query\": \"financial report\",\n  \"top_k\": 5,\n  \"min_similarity\": 0.0\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/search",
@@ -291,144 +339,6 @@
               "path": ["api", "v1", "search"]
             },
             "description": "Perform semantic/vector search on documents"
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "User Management",
-      "item": [
-        {
-          "name": "Create User",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.environment.set('user_id', jsonData.user_id);",
-                  "    pm.test('User created - ID set', () => {",
-                  "        pm.expect(jsonData).to.have.property('user_id');",
-                  "    });",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"username\": \"john.doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"full_name\": \"John Doe\",\n  \"role\": \"user\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/users/create",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "users", "create"]
-            },
-            "description": "Create a new user\n\nRoles: admin, archive_manager, auditor, user, viewer\n\nRequires: user_create permission"
-          },
-          "response": []
-        },
-        {
-          "name": "List Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/users",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "users"]
-            },
-            "description": "List all users in the system"
-          },
-          "response": []
-        },
-        {
-          "name": "Get User Info",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/users/{{user_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "users", "{{user_id}}"]
-            },
-            "description": "Get information about a specific user"
-          },
-          "response": []
-        },
-        {
-          "name": "Assign Role",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"role\": \"archive_manager\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/users/assign-role",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "users", "assign-role"]
-            },
-            "description": "Assign a role to a user\n\nRoles: admin, archive_manager, auditor, user, viewer\n\nRequires: role_assign permission"
-          },
-          "response": []
-        },
-        {
-          "name": "Delete User",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/users/{{user_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "users", "{{user_id}}"]
-            },
-            "description": "Delete a user from the system\n\nRequires: user_delete permission"
           },
           "response": []
         }
@@ -546,10 +456,10 @@
       ]
     },
     {
-      "name": "Lifecycle & Archiving",
+      "name": "Deep Archive & Restore",
       "item": [
         {
-          "name": "Deep Archive Document",
+          "name": "Move to Deep Archive",
           "request": {
             "method": "POST",
             "header": [
@@ -565,19 +475,19 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"storage_tier\": \"glacier\"\n}"
+              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"storage_tier\": \"deep_archive\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/deep-archive",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "deep-archive"]
             },
-            "description": "Move document to deep archive (Glacier)"
+            "description": "Move document to deep archive (AWS Glacier, Azure Archive, GCP Archive)"
           },
           "response": []
         },
         {
-          "name": "Restore from Archive",
+          "name": "Restore from Deep Archive",
           "request": {
             "method": "POST",
             "header": [
@@ -593,14 +503,166 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"document_id\": \"{{document_id}}\"\n}"
+              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"restore_days\": 7,\n  \"restore_tier\": \"Standard\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/restore",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "restore"]
             },
-            "description": "Restore document from archive"
+            "description": "Restore document from deep archive storage. Note: retrieval may take hours."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Archive Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/archive-status/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "archive-status", "{{document_id}}"]
+            },
+            "description": "Get the current archive/restore status of a document"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Glacier & Lifecycle",
+      "item": [
+        {
+          "name": "Retrieve from Glacier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"restore_tier\": \"Standard\",\n  \"restore_days\": 7\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/glacier/retrieve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "glacier", "retrieve"]
+            },
+            "description": "Retrieve a document from Glacier/archive storage. If restored, returns content. Otherwise initiates restore."
+          },
+          "response": []
+        },
+        {
+          "name": "Retrieve from Glacier by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/glacier/retrieve/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "glacier", "retrieve", "{{document_id}}"]
+            },
+            "description": "Retrieve a document from Glacier by ID with default restore options"
+          },
+          "response": []
+        },
+        {
+          "name": "Run Lifecycle Archival",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_tier\": \"deep_archive\",\n  \"dry_run\": false,\n  \"archive_after_days\": 90\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/lifecycle/archive",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "lifecycle", "archive"]
+            },
+            "description": "Run lifecycle archival process to move old documents to archive storage"
+          },
+          "response": []
+        },
+        {
+          "name": "Check Restore Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/lifecycle/check-restores",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "lifecycle", "check-restores"]
+            },
+            "description": "Check status of all documents with restore in progress and publish Kafka events for completed restores"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Documents Eligible for Archival",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/lifecycle/eligible?target_tier=deep_archive&archive_after_days=90",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "lifecycle", "eligible"],
+              "query": [
+                {
+                  "key": "target_tier",
+                  "value": "deep_archive"
+                },
+                {
+                  "key": "archive_after_days",
+                  "value": "90",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get documents eligible for archival based on their creation date"
           },
           "response": []
         }

@@ -609,7 +609,7 @@ class AnonymizeResponse(BaseModel):
         default=None,
         description="Document ID of saved anonymized version (if save_anonymized_version=True)"
     )
-    mask_mode_used: str
+    mask_mode_used: str = "redact"
     message: str
     
     class Config:
@@ -767,9 +767,11 @@ class AuditLogResponse(BaseModel):
 
 class AuditLogsResponse(BaseModel):
     """Response model for list of audit logs."""
-    success: bool
+    success: bool = True
     total: int
     logs: List[AuditLogResponse]
+    skip: int = 0
+    limit: int = 100
     
     class Config:
         json_schema_extra = {

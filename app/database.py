@@ -172,30 +172,78 @@ class AuditLogEntry(Base):
 
 
 def init_db():
-    """Initialize the database tables and create default admin user."""
+    """Initialize the database tables and create default admin user and test users."""
     Base.metadata.create_all(bind=engine)
     
-    # Create default admin user if it doesn't exist
+    # Create default users if they don't exist
     db = SessionLocal()
     try:
-        admin_user = db.query(User).filter(User.username == "admin").first()
-        if not admin_user:
-            # Create default admin user
-            from app.user_management import UserManagementService
-            password_hash = UserManagementService.hash_password("password")
-            admin = User(
-                username="admin",
-                email="admin@example.com",
-                full_name="Administrator",
-                password_hash=password_hash,
-                role="admin",
-                is_active=True
-            )
-            db.add(admin)
-            db.commit()
-            print("Default admin user created (username: admin, password: password)")
+        from app.user_management import UserManagementService
+        
+        # List of default users to create
+        default_users = [
+            {
+                "username": "admin",
+                "email": "admin@example.com",
+                "full_name": "Administrator",
+                "role": "admin",
+                "password": "password"
+            },
+            {
+                "username": "archive_manager",
+                "email": "manager@example.com",
+                "full_name": "Archive Manager",
+                "role": "archive_manager",
+                "password": "password"
+            },
+            {
+                "username": "auditor",
+                "email": "auditor@example.com",
+                "full_name": "Auditor",
+                "role": "auditor",
+                "password": "password"
+            },
+            {
+                "username": "user",
+                "email": "user@example.com",
+                "full_name": "Regular User",
+                "role": "user",
+                "password": "password"
+            },
+            {
+                "username": "viewer",
+                "email": "viewer@example.com",
+                "full_name": "Viewer",
+                "role": "viewer",
+                "password": "password"
+            }
+        ]
+        
+        # Create each user if it doesn't exist
+        for user_data in default_users:
+            existing_user = db.query(User).filter(User.username == user_data["username"]).first()
+            if not existing_user:
+                password_hash = UserManagementService.hash_password(user_data["password"])
+                new_user = User(
+                    username=user_data["username"],
+                    email=user_data["email"],
+                    full_name=user_data["full_name"],
+                    password_hash=password_hash,
+                    role=user_data["role"],
+                    is_active="true"
+                )
+                db.add(new_user)
+        
+        db.commit()
+        print("\nDefault users created:")
+        print("  - admin / password (ADMIN: all permissions)")
+        print("  - archive_manager / password (ARCHIVE_MANAGER: document & audit operations)")
+        print("  - auditor / password (AUDITOR: audit & report read-only)")
+        print("  - user / password (USER: document upload/retrieve)")
+        print("  - viewer / password (VIEWER: read-only access)")
+        
     except Exception as e:
-        print(f"Could not create default admin user: {e}")
+        print(f"Could not create default users: {e}")
         db.rollback()
     finally:
         db.close()
