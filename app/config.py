@@ -46,6 +46,20 @@ class Settings(BaseSettings):
     app_name: str = "Cloud Document Archive"
     debug: bool = False
     
+    # GitHub Integration (for docker-entrypoint.sh)
+    github_repo_url: Optional[str] = Field(
+        default=None,
+        description="GitHub repository URL for auto-pulling code"
+    )
+    github_branch: Optional[str] = Field(
+        default="main",
+        description="GitHub branch to pull"
+    )
+    reload_on_change: Optional[str] = Field(
+        default="false",
+        description="Enable hot-reload on code changes"
+    )
+    
     # Active storage provider
     storage_provider: StorageProvider = StorageProvider.LOCAL
     
@@ -210,6 +224,12 @@ def _flatten_yaml_config(data: Dict[str, Any], flat: Dict[str, Any], prefix: str
                 flat['app_name'] = value
             elif env_key == "APP_DEBUG":
                 flat['debug'] = value
+            elif env_key == "GITHUB_REPO_URL":
+                flat['github_repo_url'] = value
+            elif env_key == "GITHUB_BRANCH":
+                flat['github_branch'] = value
+            elif env_key == "RELOAD_ON_CHANGE":
+                flat['reload_on_change'] = value
             elif env_key == "STORAGE_PROVIDER":
                 flat['storage_provider'] = value
             elif env_key == "AWS_ACCESS_KEY_ID":
