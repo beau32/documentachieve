@@ -345,7 +345,9 @@ class UserManagementService:
         role = UserRole(user.role)
         permissions = DEFAULT_ROLE_PERMISSIONS.get(role, [])
         
-        return permission.value in permissions
+        # Handle both string and enum permission values
+        permission_str = permission.value if hasattr(permission, 'value') else permission
+        return permission_str in permissions
     
     def get_user_permissions(self, user_id: int) -> List[str]:
         """Get all permissions for a user."""
